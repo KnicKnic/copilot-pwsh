@@ -16,7 +16,6 @@ The GitHub Copilot CLI is great for interactive use, but:
 
 - **No custom system prompts** — can't replace or modify the AI's persona
 - **No session management** — can't maintain multi-turn conversations programmatically
-- **No MCP tool control** — can't selectively enable/disable tools
 - **No composability** — can't pipe, loop, or script AI interactions
 - **MCP env vars don't propagate** — SDK bug breaks MCP server configs
 - **MCP servers restart every session** — losing auth tokens and incurring startup delay
