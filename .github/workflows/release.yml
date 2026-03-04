@@ -136,9 +136,9 @@ jobs:
           dotnet-version: '10.0.x'
           dotnet-quality: 'preview'
 
-      - name: Install PowerShell preview
+      - name: Install PowerShell 7.6 preview
         run: |
-          dotnet tool install --global PowerShell --prerelease
+          dotnet tool install --global PowerShell --version '7.6.0-*'
           pwsh --version
 
       - name: Publish to PSGallery
