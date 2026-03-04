@@ -1,0 +1,40 @@
+# .NET build outputs
+bin/
+obj/
+out/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+# IDE
+.vs/
+.vscode/.settings/
+*.user
+*.suo
+*.userprefs
+*.sln.docstates
+
+# Rider
+.idea/
+*.sln.iml
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# PowerShell module output
+output/
+publish/
+
+# Logs
+*.log
+logs/
+
+# Misc
+*.swp
+*.swo
+*~

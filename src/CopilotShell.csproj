@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CopilotShell</RootNamespace>
+    <AssemblyName>CopilotShell</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <!-- Cross-platform: no platform-specific dependencies -->
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
+
+    <!-- Lock file to prevent breaking changes from prerelease packages -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- PowerShell 7+ SDK (compile-only reference) -->
+    <PackageReference Include="System.Management.Automation" Version="7.5.*" PrivateAssets="all" />
+
+    <!-- GitHub Copilot SDK -->
+    <PackageReference Include="GitHub.Copilot.SDK" Version="0.1.29" />
+
+    <!-- For AIFunctionFactory tool support -->
+    <PackageReference Include="Microsoft.Extensions.AI" Version="*" />
+  </ItemGroup>
+
+</Project>

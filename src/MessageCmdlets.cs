@@ -1,0 +1,266 @@
+using System.Management.Automation;
+using GitHub.Copilot.SDK;
+
+namespace CopilotShell;
+
+/// <summary>
+/// Send a message to a Copilot session.
+/// With -Stream, emits session events to the pipeline in real time.
+/// Without -Stream, waits for the session to become idle and returns the
+/// final assistant message text.
+/// </summary>
+/// <example>
+/// <code>Send-CopilotMessage -Session $session -Prompt "Hello"</code>
+/// <code>Send-CopilotMessage $session "Explain this code" -Stream</code>
+/// <code>"Fix the bug" | Send-CopilotMessage -Session $session -Attachment ./file.cs</code>
+/// <code>Send-CopilotMessage $session "Use this agent" -Agent my-agent</code>
+/// </example>
+[Cmdlet(VerbsCommunications.Send, "CopilotMessage")]
+[OutputType(typeof(string), typeof(SessionEvent))]
+public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
+{
+    [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true,
+        HelpMessage = "The CopilotSession to send to.")]
+    public CopilotSession Session { get; set; } = null!;
+
+    [Parameter(Mandatory = true, Position = 1,
+        HelpMessage = "The prompt/message to send.")]
+    public string Prompt { get; set; } = null!;
+
+    [Parameter(HelpMessage = "File paths to attach.")]
+    [Alias("Attachments")]
+    public string[]? Attachment { get; set; }
+
+    [Parameter(HelpMessage = "Stream session events to the pipeline in real time.")]
+    public SwitchParameter Stream { get; set; }
+
+    [Parameter(HelpMessage = "Timeout in seconds. 0 = no timeout.")]
+    public int TimeoutSeconds { get; set; } = 0;
+
+    [Parameter(HelpMessage = "Name of a custom agent to select before sending the message. Pass $null or empty string to deselect the current agent.")]
+    public string? Agent { get; set; }
+
+    // Track cancellation tokens per session to cancel zombie operations from Ctrl+C
+    private static readonly Dictionary<string, CancellationTokenSource> _activeCancellations = new();
+    private CancellationTokenSource? _currentCts;
+
+    protected override void StopProcessing()
+    {
+        // Called when user presses Ctrl+C
+        _currentCts?.Cancel();
+        base.StopProcessing();
+    }
+
+    protected override async Task ProcessRecordAsync()
+    {
+        // Cancel any zombie operation from a previous Ctrl+C
+        lock (_activeCancellations)
+        {
+            if (_activeCancellations.TryGetValue(Session.SessionId, out var oldCts))
+            {
+                try
+                {
+                    oldCts.Cancel();
+                    oldCts.Dispose();
+                }
+                catch { }
+                _activeCancellations.Remove(Session.SessionId);
+            }
+        }
+
+        // Create a new cancellation token for this operation
+        var cts = new CancellationTokenSource();
+        _currentCts = cts;
+        lock (_activeCancellations)
+        {
+            _activeCancellations[Session.SessionId] = cts;
+        }
+
+        try
+        {
+            await ProcessRecordInternalAsync(cts.Token);
+        }
+        finally
+        {
+            _currentCts = null;
+            lock (_activeCancellations)
+            {
+                _activeCancellations.Remove(Session.SessionId);
+            }
+            cts.Dispose();
+        }
+    }
+
+    private async Task ProcessRecordInternalAsync(CancellationToken cancellationToken)
+    {
+        // Switch agent if -Agent was specified
+        if (MyInvocation.BoundParameters.ContainsKey(nameof(Agent)))
+        {
+            if (string.IsNullOrEmpty(Agent))
+            {
+                WriteVerbose("Deselecting current agent.");
+                await Session.Rpc.Agent.DeselectAsync(cancellationToken);
+            }
+            else
+            {
+                WriteVerbose($"Selecting agent: {Agent}");
+                await Session.Rpc.Agent.SelectAsync(Agent, cancellationToken);
+            }
+        }
+
+        var msgOpts = new MessageOptions { Prompt = Prompt };
+
+        if (Attachment is not null)
+        {
+            var attachments = new List<UserMessageDataAttachmentsItem>();
+            foreach (var path in Attachment)
+            {
+                attachments.Add(new UserMessageDataAttachmentsItemFile
+                {
+                    Path = path,
+                    DisplayName = System.IO.Path.GetFileName(path)
+                });
+            }
+            msgOpts.Attachments = attachments;
+        }
+
+        if (Stream.IsPresent)
+        {
+            // For streaming, use manual subscription
+            var done = new TaskCompletionSource();
+            
+            // Capture the SynchronizationContext to marshal WriteObject calls back to the pipeline thread
+            var syncContext = SynchronizationContext.Current;
+
+            IDisposable? sub = null;
+            
+            // Register cancellation to complete the done task
+            using var registration = cancellationToken.Register(() =>
+            {
+                done.TrySetCanceled(cancellationToken);
+                sub?.Dispose();
+            });
+            
+            sub = Session.On(evt =>
+            {
+                // Marshal WriteObject back to the pipeline thread
+                if (syncContext is not null)
+                {
+                    syncContext.Post(_ => WriteObject(evt), null);
+                }
+                else
+                {
+                    WriteObject(evt);
+                }
+
+                if (evt is AssistantMessageEvent msg)
+                {
+                    // Not using lastAssistantContent in streaming mode
+                }
+                else if (evt is SessionIdleEvent)
+                {
+                    done.TrySetResult();
+                }
+                else if (evt is SessionErrorEvent err)
+                {
+                    done.TrySetException(new Exception(err.Data.Message));
+                }
+            });
+
+            try
+            {
+                await Session.SendAsync(msgOpts, cancellationToken);
+                
+                if (TimeoutSeconds > 0)
+                {
+                    var completed = await Task.WhenAny(
+                        done.Task,
+                        Task.Delay(TimeSpan.FromSeconds(TimeoutSeconds), cancellationToken));
+                    if (completed != done.Task)
+                    {
+                        await Session.AbortAsync(cancellationToken);
+                        WriteWarning($"Timed out after {TimeoutSeconds}s — session aborted.");
+                    }
+                }
+                else
+                {
+                    await done.Task;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Operation was cancelled
+                try { await Session.AbortAsync(CancellationToken.None); } catch { }
+                throw;
+            }
+            finally
+            {
+                sub?.Dispose();
+            }
+        }
+        else
+        {
+            // For non-streaming, use SendAndWaitAsync which handles lifecycle better
+            var timeout = TimeoutSeconds > 0 ? TimeSpan.FromSeconds(TimeoutSeconds) : (TimeSpan?)null;
+            
+            try
+            {
+                var result = await Session.SendAndWaitAsync(msgOpts, timeout, cancellationToken);
+                
+                if (result?.Data?.Content is not null)
+                {
+                    WriteObject(result.Data.Content);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Operation was cancelled
+                try { await Session.AbortAsync(CancellationToken.None); } catch { }
+                throw;
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Wait for a Copilot session to become idle.
+/// </summary>
+[Cmdlet(VerbsLifecycle.Wait, "CopilotSession")]
+public sealed class WaitCopilotSessionCommand : AsyncPSCmdlet
+{
+    [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true,
+        HelpMessage = "The CopilotSession to wait on.")]
+    public CopilotSession Session { get; set; } = null!;
+
+    [Parameter(HelpMessage = "Timeout in seconds. 0 = no timeout.")]
+    public int TimeoutSeconds { get; set; } = 0;
+
+    protected override async Task ProcessRecordAsync()
+    {
+        var done = new TaskCompletionSource();
+
+        using var sub = Session.On(evt =>
+        {
+            if (evt is SessionIdleEvent)
+                done.TrySetResult();
+            else if (evt is SessionErrorEvent err)
+                done.TrySetException(new Exception(err.Data.Message));
+        });
+
+        if (TimeoutSeconds > 0)
+        {
+            var completed = await Task.WhenAny(
+                done.Task,
+                Task.Delay(TimeSpan.FromSeconds(TimeoutSeconds)));
+
+            if (completed != done.Task)
+            {
+                WriteWarning($"Timed out after {TimeoutSeconds}s waiting for session idle.");
+            }
+        }
+        else
+        {
+            await done.Task;
+        }
+    }
+}
