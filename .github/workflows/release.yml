@@ -138,7 +138,12 @@ jobs:
 
       - name: Install PowerShell 7.6 preview
         run: |
-          dotnet tool install --global PowerShell --version '7.6.0-*'
+          PWSH_VERSION="7.6.0-rc.1"
+          curl -fsSL "https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-linux-x64.tar.gz" -o /tmp/pwsh.tar.gz
+          sudo mkdir -p /opt/microsoft/powershell/7
+          sudo tar xzf /tmp/pwsh.tar.gz -C /opt/microsoft/powershell/7
+          sudo chmod +x /opt/microsoft/powershell/7/pwsh
+          sudo ln -sf /opt/microsoft/powershell/7/pwsh /usr/local/bin/pwsh
           pwsh --version
 
       - name: Publish to PSGallery
