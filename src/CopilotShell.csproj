@@ -18,6 +18,15 @@
     <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
   </PropertyGroup>
 
+  <!-- Embed the required Copilot CLI version (from the SDK) into the assembly
+       so CliDownloader can fetch the exact matching binary at runtime. -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>CopilotCliVersion</_Parameter1>
+      <_Parameter2>$(CopilotCliVersion)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <ItemGroup>
     <!-- PowerShell 7+ SDK (compile-only reference) -->
     <PackageReference Include="System.Management.Automation" Version="7.5.*" PrivateAssets="all" />

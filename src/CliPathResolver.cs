@@ -3,34 +3,63 @@ using System.Runtime.InteropServices;
 namespace CopilotShell;
 
 /// <summary>
-/// Resolves the path to the bundled Copilot CLI binary shipped with the
-/// GitHub.Copilot.SDK NuGet package inside this module's output.
+/// Resolves the path to the Copilot CLI binary.
+/// Checks in order: bundled in module folder, user-local download cache.
 /// </summary>
 internal static class CliPathResolver
 {
     /// <summary>
-    /// Returns the full path to the bundled copilot(.exe) binary next to this
-    /// assembly, or null if not found.
+    /// Returns the full path to copilot(.exe), checking the module folder first,
+    /// then the user-local cache. Returns null if not found anywhere.
+    /// Call <see cref="ResolveOrDownloadAsync"/> to auto-download when missing.
     /// </summary>
     public static string? Resolve()
     {
-        // The assembly lives in the module folder alongside runtimes/
         var assemblyDir = Path.GetDirectoryName(typeof(CliPathResolver).Assembly.Location);
-        if (assemblyDir is null) return null;
-
-        // Determine the RID folder name
         var rid = GetRuntimeIdentifier();
-
         var exeName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
             ? "copilot.exe"
             : "copilot";
 
-        // runtimes/<rid>/native/copilot[.exe]
-        var candidate = Path.Combine(assemblyDir, "runtimes", rid, "native", exeName);
-        if (File.Exists(candidate)) return candidate;
+        // 1. Check bundled location: runtimes/<rid>/native/copilot[.exe]
+        if (assemblyDir is not null)
+        {
+            var bundled = Path.Combine(assemblyDir, "runtimes", rid, "native", exeName);
+            if (File.Exists(bundled)) return bundled;
+        }
 
-        // Fallback: just "copilot" on PATH
+        // 2. Check user-local download cache
+        var version = CliDownloader.GetRequiredCliVersion();
+        if (version is not null)
+        {
+            var cached = CliDownloader.FindCached(version, rid);
+            if (cached is not null) return cached;
+        }
+
         return null;
+    }
+
+    /// <summary>
+    /// Resolves the CLI path, downloading from npm if not found locally.
+    /// </summary>
+    public static async Task<string?> ResolveOrDownloadAsync(
+        Action<string>? log = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Try local resolution first
+        var path = Resolve();
+        if (path is not null) return path;
+
+        // Auto-download from npm
+        var version = CliDownloader.GetRequiredCliVersion();
+        if (version is null)
+        {
+            log?.Invoke("Cannot determine required Copilot CLI version — CopilotCliVersion metadata not found in assembly.");
+            return null;
+        }
+
+        var rid = GetRuntimeIdentifier();
+        return await CliDownloader.DownloadAsync(version, rid, log, cancellationToken);
     }
 
     private static string GetRuntimeIdentifier()

@@ -19,24 +19,23 @@ A cross-platform PowerShell 7+ module that wraps the [GitHub Copilot SDK](https:
 ## Known limitations
 1. ~~mcp env args dont work~~ — **Workaround implemented:** all local MCP servers are automatically launched through `mcp-wrapper`, which handles env var propagation and persistent "zombie" daemon connections for eligible servers. Use `-NoMcpWrapper` to disable. See [github/copilot-sdk#163](https://github.com/github/copilot-sdk/issues/163) and [MCP-WRAPPER.md](MCP-WRAPPER.md).
 1. Have a hack to load MCPs to get their name for filtering
-1. I dont know how to start with an agent -- need to spend more time here.
 
 ## Quick Install
 
 ```powershell
-# 1. Install .NET 10 SDK
-winget install Microsoft.DotNet.SDK.Preview
+Install-Module CopilotShell
+```
 
-# 2. Install PowerShell 7.6 preview (runs on .NET 10)
-winget install Microsoft.PowerShell.Preview
+The Copilot CLI binary is **automatically downloaded** on first use — no manual setup needed. It's cached in your user profile so subsequent runs start instantly.
 
-# 3. Clone and build (run in pwsh-preview)
-git clone <repo-url> copilot-sdk
-cd copilot-sdk
-./build.ps1 -Install
+> Requires [PowerShell 7.6 preview](https://github.com/PowerShell/PowerShell/releases). Install with: `winget install Microsoft.PowerShell.Preview`
 
-# 4. Import
-Import-Module CopilotShell
+### From source
+
+```powershell
+git clone https://github.com/KnicKnic/copilot-pwsh.git
+cd copilot-pwsh
+./build.ps1 -Clean -Install
 ```
 
 ## Rebuild & Reinstall

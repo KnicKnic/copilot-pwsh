@@ -1,0 +1,150 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a GitHub Release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-x64
+          - os: macos-latest
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Restore & Publish CopilotShell
+        run: |
+          dotnet publish src/CopilotShell.csproj \
+            --configuration Release \
+            --output output/CopilotShell \
+            --no-self-contained \
+            -r ${{ matrix.rid }}
+        shell: bash
+
+      - name: Publish mcp-wrapper
+        run: |
+          dotnet publish mcp-wrapper/mcp-wrapper.csproj \
+            --configuration Release \
+            --output output/CopilotShell \
+            --no-self-contained \
+            -r ${{ matrix.rid }}
+        shell: bash
+
+      - name: Copy module files
+        run: |
+          cp src/CopilotShell.psd1 output/CopilotShell/
+          cp src/Format-CopilotEvent.ps1 output/CopilotShell/
+        shell: bash
+
+      - name: Stamp build date
+        shell: pwsh
+        run: |
+          $manifest = 'output/CopilotShell/CopilotShell.psd1'
+          $date = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+          (Get-Content $manifest -Raw) -replace "BuildDate\s*=\s*'source'", "BuildDate  = '$date'" |
+            Set-Content $manifest -NoNewline
+
+      - name: Create archive
+        shell: bash
+        run: |
+          cd output
+          if [ "${{ matrix.rid }}" = "win-x64" ]; then
+            7z a -tzip ../CopilotShell-${{ matrix.rid }}.zip CopilotShell/
+          else
+            tar czf ../CopilotShell-${{ matrix.rid }}.tar.gz CopilotShell/
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CopilotShell-${{ matrix.rid }}
+          path: |
+            CopilotShell-${{ matrix.rid }}.zip
+            CopilotShell-${{ matrix.rid }}.tar.gz
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.create_release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev-$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+            echo "tag=dev-$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: CopilotShell ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          generate_release_notes: true
+          files: |
+            artifacts/CopilotShell-*.zip
+            artifacts/CopilotShell-*.tar.gz
+
+  publish-psgallery:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Install PowerShell preview
+        run: |
+          dotnet tool install --global PowerShell --prerelease
+          pwsh --version
+
+      - name: Publish to PSGallery
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          $version = '${{ github.ref_name }}' -replace '^v', ''
+          ./publish.ps1 -ApiKey $env:PSGALLERY_API_KEY -Version $version

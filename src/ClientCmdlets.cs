@@ -53,10 +53,11 @@ public sealed class NewCopilotClientCommand : AsyncPSCmdlet
     {
         var opts = new CopilotClientOptions();
 
-        // Auto-detect bundled CLI if not explicitly provided
+        // Auto-detect bundled CLI or download from npm if not explicitly provided
         if (CliPath is null)
         {
-            var resolved = CliPathResolver.Resolve();
+            var resolved = await CliPathResolver.ResolveOrDownloadAsync(
+                msg => WriteVerbose(msg));
             if (resolved is not null) opts.CliPath = resolved;
         }
 

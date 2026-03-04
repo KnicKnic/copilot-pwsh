@@ -54,7 +54,7 @@
     PrivateData = @{
         PSData = @{
             Tags       = @('Copilot', 'GitHub', 'AI', 'Agent', 'LLM', 'SDK')
-            ProjectUri = 'https://github.com/github/copilot-sdk'
+            ProjectUri = 'https://github.com/KnicKnic/copilot-pwsh'
             LicenseUri = 'https://opensource.org/licenses/MIT'
             BuildDate  = 'source'
         }

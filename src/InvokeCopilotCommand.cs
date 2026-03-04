@@ -114,7 +114,8 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
             clientOpts.CliPath = CliPath;
         else
         {
-            var resolved = CliPathResolver.Resolve();
+            var resolved = await CliPathResolver.ResolveOrDownloadAsync(
+                msg => WriteVerbose(msg), cancellationToken);
             if (resolved is not null) clientOpts.CliPath = resolved;
         }
         if (GitHubToken is not null) clientOpts.GitHubToken = GitHubToken;

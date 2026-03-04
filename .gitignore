@@ -29,6 +29,13 @@ desktop.ini
 # PowerShell module output
 output/
 publish/
+stage/
+
+# Install logs
+install.log
+
+# Secrets
+.env
 
 # Logs
 *.log
