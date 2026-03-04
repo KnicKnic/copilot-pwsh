@@ -22,14 +22,22 @@ namespace CopilotShell;
 /// # Load a custom agent from a .agent.md file
 /// Invoke-Copilot "Check the ADO pipeline" -CustomAgentFile .github\agents\ado-team.agent.md
 /// </code>
+/// <code>
+/// # Use a VS Code-compatible .prompt.md file
+/// Invoke-Copilot -PromptFile .github\prompts\get-work-items.prompt.md
+/// </code>
+/// <code>
+/// # Use a prompt file but override the agent
+/// Invoke-Copilot -PromptFile .github\prompts\get-work-items.prompt.md -Agent different-agent
+/// </code>
 /// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "Copilot")]
 [OutputType(typeof(string), typeof(SessionEvent))]
 public sealed class InvokeCopilotCommand : AsyncPSCmdlet
 {
-    [Parameter(Mandatory = true, Position = 0,
-        HelpMessage = "The prompt to send.")]
-    public string Prompt { get; set; } = null!;
+    [Parameter(Position = 0,
+        HelpMessage = "The prompt to send. Required unless -PromptFile is specified.")]
+    public string? Prompt { get; set; }
 
     [Parameter(HelpMessage = "Model to use (e.g. gpt-5, claude-sonnet-4.5).")]
     public string? Model { get; set; }
@@ -80,6 +88,9 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
     [Alias("AgentFile")]
     public string[]? CustomAgentFile { get; set; }
 
+    [Parameter(HelpMessage = "Path to a .prompt.md file (VS Code compatible). Contains frontmatter with optional 'agent' and 'description' fields, and a body used as the prompt text. Explicit -Prompt and -Agent override values from the file.")]
+    public string? PromptFile { get; set; }
+
     private CancellationTokenSource? _cts;
 
     protected override void StopProcessing()
@@ -108,6 +119,29 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
 
     private async Task ProcessInternalAsync(CancellationToken cancellationToken)
     {
+        // --- Parse prompt file if specified ---
+        PromptFileResult? promptFileResult = null;
+        if (PromptFile is not null)
+        {
+            var resolvedPath = ResolvePSPath(PromptFile);
+            promptFileResult = PromptFileParser.Parse(resolvedPath);
+            WriteVerbose($"Loaded prompt file: {Path.GetFileName(resolvedPath)}");
+            if (promptFileResult.Agent is not null)
+                WriteVerbose($"  Agent from prompt file: {promptFileResult.Agent}");
+            if (promptFileResult.Description is not null)
+                WriteVerbose($"  Description: {promptFileResult.Description}");
+        }
+
+        // Resolve effective prompt: explicit -Prompt overrides prompt file body
+        var effectivePrompt = Prompt ?? promptFileResult?.Prompt;
+        if (string.IsNullOrEmpty(effectivePrompt))
+        {
+            ThrowTerminatingError(new ErrorRecord(
+                new PSArgumentException("Either -Prompt or -PromptFile (with prompt body) must be specified."),
+                "MissingPrompt", ErrorCategory.InvalidArgument, null));
+            return;
+        }
+
         // --- Client ---
         var clientOpts = new CopilotClientOptions();
         if (CliPath is not null)
@@ -254,8 +288,13 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
         await using var session = await client.CreateSessionAsync(sessionConfig);
 
         // Select agent if specified
-        // If a single custom agent was loaded and -Agent was not specified, auto-select it
-        var agentToSelect = Agent;
+        // Priority: explicit -Agent > prompt file agent > auto-select single custom agent
+        var agentToSelect = MyInvocation.BoundParameters.ContainsKey(nameof(Agent)) ? Agent : null;
+        if (agentToSelect is null && promptFileResult?.Agent is not null)
+        {
+            agentToSelect = promptFileResult.Agent;
+            WriteVerbose($"Using agent from prompt file: {agentToSelect}");
+        }
         if (agentToSelect is null && sessionConfig.CustomAgents?.Count == 1)
         {
             agentToSelect = sessionConfig.CustomAgents[0].Name;
@@ -268,7 +307,7 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
         }
 
         // --- Message options ---
-        var msgOpts = new MessageOptions { Prompt = Prompt };
+        var msgOpts = new MessageOptions { Prompt = effectivePrompt };
 
         if (Attachment is not null)
         {

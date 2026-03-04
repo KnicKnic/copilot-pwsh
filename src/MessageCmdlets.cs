@@ -14,6 +14,10 @@ namespace CopilotShell;
 /// <code>Send-CopilotMessage $session "Explain this code" -Stream</code>
 /// <code>"Fix the bug" | Send-CopilotMessage -Session $session -Attachment ./file.cs</code>
 /// <code>Send-CopilotMessage $session "Use this agent" -Agent my-agent</code>
+/// <code>
+/// # Use a VS Code-compatible .prompt.md file
+/// Send-CopilotMessage $session -PromptFile .github\prompts\get-work-items.prompt.md
+/// </code>
 /// </example>
 [Cmdlet(VerbsCommunications.Send, "CopilotMessage")]
 [OutputType(typeof(string), typeof(SessionEvent))]
@@ -23,9 +27,12 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
         HelpMessage = "The CopilotSession to send to.")]
     public CopilotSession Session { get; set; } = null!;
 
-    [Parameter(Mandatory = true, Position = 1,
-        HelpMessage = "The prompt/message to send.")]
-    public string Prompt { get; set; } = null!;
+    [Parameter(Position = 1,
+        HelpMessage = "The prompt/message to send. Required unless -PromptFile is specified.")]
+    public string? Prompt { get; set; }
+
+    [Parameter(HelpMessage = "Path to a .prompt.md file (VS Code compatible). Contains frontmatter with optional 'agent' and 'description' fields, and a body used as the prompt text. Explicit -Prompt and -Agent override values from the file.")]
+    public string? PromptFile { get; set; }
 
     [Parameter(HelpMessage = "File paths to attach.")]
     [Alias("Attachments")]
@@ -93,8 +100,34 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
 
     private async Task ProcessRecordInternalAsync(CancellationToken cancellationToken)
     {
-        // Switch agent if -Agent was specified
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(Agent)))
+        // --- Parse prompt file if specified ---
+        PromptFileResult? promptFileResult = null;
+        if (PromptFile is not null)
+        {
+            var resolvedPath = ResolvePSPath(PromptFile);
+            promptFileResult = PromptFileParser.Parse(resolvedPath);
+            WriteVerbose($"Loaded prompt file: {Path.GetFileName(resolvedPath)}");
+            if (promptFileResult.Agent is not null)
+                WriteVerbose($"  Agent from prompt file: {promptFileResult.Agent}");
+        }
+
+        // Resolve effective prompt: explicit -Prompt overrides prompt file body
+        var effectivePrompt = Prompt ?? promptFileResult?.Prompt;
+        if (string.IsNullOrEmpty(effectivePrompt))
+        {
+            ThrowTerminatingError(new ErrorRecord(
+                new PSArgumentException("Either -Prompt or -PromptFile (with prompt body) must be specified."),
+                "MissingPrompt", ErrorCategory.InvalidArgument, null));
+            return;
+        }
+
+        // Switch agent: explicit -Agent > prompt file agent
+        if (!MyInvocation.BoundParameters.ContainsKey(nameof(Agent)) && promptFileResult?.Agent is not null)
+        {
+            WriteVerbose($"Selecting agent from prompt file: {promptFileResult.Agent}");
+            await Session.Rpc.Agent.SelectAsync(promptFileResult.Agent, cancellationToken);
+        }
+        else if (MyInvocation.BoundParameters.ContainsKey(nameof(Agent)))
         {
             if (string.IsNullOrEmpty(Agent))
             {
@@ -108,7 +141,7 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
             }
         }
 
-        var msgOpts = new MessageOptions { Prompt = Prompt };
+        var msgOpts = new MessageOptions { Prompt = effectivePrompt };
 
         if (Attachment is not null)
         {
