@@ -42,7 +42,8 @@ jobs:
             --configuration Release \
             --output output/CopilotShell \
             --no-self-contained \
-            -r ${{ matrix.rid }}
+            -r ${{ matrix.rid }} \
+            -p:CopilotSkipCliDownload=true
         shell: bash
 
       - name: Publish mcp-wrapper
@@ -136,6 +137,9 @@ jobs:
           dotnet-version: '10.0.x'
           dotnet-quality: 'preview'
 
+      # pwsh 7.6 is required because the module manifest specifies PowerShellVersion = '7.6'
+      # and Test-ModuleManifest checks the running host version. The NuGet 'PowerShell' dotnet
+      # tool only has 7.5.x — 7.6 previews are only published on GitHub Releases.
       - name: Install PowerShell 7.6 preview
         run: |
           PWSH_VERSION="7.6.0-rc.1"
