@@ -7,9 +7,9 @@
     Copyright         = '(c) 2026. MIT License.'
     Description       = 'PowerShell 7+ module wrapping the GitHub Copilot SDK. Provides cmdlets for managing Copilot clients, sessions, and messages with full system-message customization and streaming support.'
 
-    # Minimum PowerShell version — 7.5+ only (no Windows PowerShell 5.x)
-    PowerShellVersion = '7.5'
-    # .NET 10 (required by GitHub.Copilot.SDK)
+    # Minimum PowerShell version — 7.6+ only (first pwsh on .NET 10)
+    PowerShellVersion = '7.6'
+    # .NET 10 (required by GitHub.Copilot.SDK) — not enforced by pwsh Core, but documents the requirement
     DotNetFrameworkVersion = '10.0'
     CompatiblePSEditions = @('Core')
 
