@@ -22,17 +22,19 @@ internal static class CliPathResolver
             : "copilot";
 
         // 1. Check bundled location: runtimes/<rid>/native/copilot[.exe]
+        //    The bundled binary ships with the SDK and is always the correct version.
         if (assemblyDir is not null)
         {
             var bundled = Path.Combine(assemblyDir, "runtimes", rid, "native", exeName);
-            if (File.Exists(bundled)) return bundled;
+            if (File.Exists(bundled))
+                return bundled;
         }
 
-        // 2. Check user-local download cache
-        var version = CliDownloader.GetRequiredCliVersion();
-        if (version is not null)
+        // 2. Check user-local download cache (version-aware)
+        var requiredVersion = CliDownloader.GetRequiredCliVersion();
+        if (requiredVersion is not null)
         {
-            var cached = CliDownloader.FindCached(version, rid);
+            var cached = CliDownloader.FindCached(requiredVersion, rid);
             if (cached is not null) return cached;
         }
 

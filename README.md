@@ -6,15 +6,11 @@ A cross-platform PowerShell 7+ module that wraps the [GitHub Copilot SDK](https:
 
 | Requirement | Version |
 |---|---|
-| .NET SDK | 10.0+ (RC/preview — required by GitHub.Copilot.SDK) |
-| PowerShell | 7.6 preview (runs on .NET 10) |
+| .NET SDK | 8.0+ |
+| PowerShell | 7.4+ (runs on .NET 8) |
 | Copilot CLI | Installed and on PATH (or pass `-CliPath`) |
 
-> **Windows PowerShell 5.x is not supported.** Use `pwsh` (PowerShell 7.6+ preview).
->
-> The GitHub.Copilot.SDK NuGet package requires `System.Text.Json 10.x`, which
-> means the host process must run on .NET 10. PowerShell 7.6 preview is the
-> first pwsh release on .NET 10.
+> **Windows PowerShell 5.x is not supported.** Use `pwsh` (PowerShell 7.4+).
 
 ## Known limitations
 1. ~~mcp env args dont work~~ — **Workaround implemented:** all local MCP servers are automatically launched through `mcp-wrapper`, which handles env var propagation and persistent "zombie" daemon connections for eligible servers. Use `-NoMcpWrapper` to disable. See [github/copilot-sdk#163](https://github.com/github/copilot-sdk/issues/163) and [MCP-WRAPPER.md](MCP-WRAPPER.md).
@@ -28,7 +24,7 @@ Install-Module CopilotShell
 
 The Copilot CLI binary is **automatically downloaded** on first use — no manual setup needed. It's cached in your user profile so subsequent runs start instantly.
 
-> Requires [PowerShell 7.6 preview](https://github.com/PowerShell/PowerShell/releases). Install with: `winget install Microsoft.PowerShell.Preview`
+> Requires [PowerShell 7.4+](https://github.com/PowerShell/PowerShell/releases). Install with: `winget install Microsoft.PowerShell`
 
 ### From source
 
@@ -50,25 +46,6 @@ Then reload in any open pwsh session:
 Remove-Module CopilotShell -ErrorAction SilentlyContinue
 Import-Module CopilotShell
 ```
-
-## VS Code Tip
-
-To make pwsh-preview the default terminal in VS Code (so it appears when you click the `+` button):
-
-1. Open Settings (JSON): `Ctrl+Shift+P` → "Preferences: Open User Settings (JSON)"
-2. Add:
-
-```json
-"terminal.integrated.profiles.windows": {
-    "PowerShell Preview": {
-        "path": "C:\\Program Files\\PowerShell\\7-preview\\pwsh.exe",
-        "icon": "beaker"
-    }
-},
-"terminal.integrated.defaultProfile.windows": "PowerShell Preview"
-```
-
-After saving, new terminals will use pwsh-preview automatically.
 
 ## Cmdlets
 
@@ -288,13 +265,13 @@ copilot-sdk/
 ├── .gitignore
 ├── MCP-WRAPPER.md             # Detailed mcp-wrapper documentation
 ├── mcp-wrapper/               # MCP proxy with zombie daemon support
-│   ├── mcp-wrapper.csproj     # .NET 10 console app
+│   ├─ mcp-wrapper.csproj     # .NET 8 console app
 │   ├── Program.cs             # Entry point: arg parsing, direct/zombie modes
 │   ├── Daemon.cs              # Zombie daemon: socket listener, child lifecycle
 │   ├── ManagedChild.cs        # Child process: JSON-RPC multiplexing, ID remapping
 │   └── ZombieEligibility.cs   # Regex-based zombie eligibility checker
 └── src/
-    ├── CopilotShell.csproj    # .NET 10 project
+    ├─ CopilotShell.csproj    # .NET 8 project
     ├── CopilotShell.psd1      # PowerShell module manifest
     ├── AsyncPSCmdlet.cs       # Base class for async cmdlets
     ├── ClientCmdlets.cs       # New/Start/Stop/Remove/Test-CopilotClient
@@ -311,7 +288,7 @@ copilot-sdk/
 
 ## Cross-Platform
 
-This module runs on Windows, macOS, and Linux wherever .NET 10 and PowerShell 7.5+ are available. No platform-specific dependencies are used.
+This module runs on Windows, macOS, and Linux wherever .NET 8+ and PowerShell 7.4+ are available. No platform-specific dependencies are used.
 
 ## License
 

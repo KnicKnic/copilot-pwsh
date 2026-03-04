@@ -1,6 +1,6 @@
 # MCP Wrapper
 
-A transparent MCP server proxy with an integrated zombie daemon for persistent server connections. Built as a single .NET 10 console application that operates in two modes: **direct proxy** for simple env/cwd forwarding, and **zombie mode** for keeping MCP servers alive across Copilot sessions.
+A transparent MCP server proxy with an integrated zombie daemon for persistent server connections. Built as a single .NET 8 console application that operates in two modes: **direct proxy** for simple env/cwd forwarding, and **zombie mode** for keeping MCP servers alive across Copilot sessions.
 
 ## Problem
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Reinstall CopilotShell module to the shared PowerShell 7-preview Modules directory.
+    Reinstall CopilotShell module to the shared PowerShell Modules directory.
     Requires elevation (Run as Administrator).
 
 .DESCRIPTION
     Removes any existing CopilotShell install, then copies the build output to
-    C:\Program Files\PowerShell\7-preview\Modules\CopilotShell.
+    C:\Program Files\PowerShell\Modules\CopilotShell.
     Always does a full clean reinstall.
 
     Run build.ps1 first, then run this script elevated, or use build.ps1 -Install
@@ -35,7 +35,7 @@ if (-not $isAdmin) {
 }
 
 $outputDir  = Join-Path $PSScriptRoot 'output' 'CopilotShell'
-$installDir = 'C:\Program Files\PowerShell\7-preview\Modules\CopilotShell'
+$installDir = 'C:\Program Files\PowerShell\Modules\CopilotShell'
 
 if (-not (Test-Path $outputDir)) {
     throw "Build output not found at $outputDir. Run build.ps1 first."
@@ -115,11 +115,11 @@ foreach ($stale in $staleFiles) {
 }
 
 # Verify critical files were installed
-$criticalFiles = @('CopilotShell.dll', 'CopilotShell.psd1', 'mcp-wrapper.exe')
+$criticalFiles = @('CopilotShell.dll', 'CopilotShell.psd1', 'mcp-wrapper.exe', 'dependencies\GitHub.Copilot.SDK.dll')
 $missing = $criticalFiles | Where-Object { -not (Test-Path (Join-Path $installDir $_)) }
 if ($missing) {
     Write-Warning "These files could not be installed (locked?): $($missing -join ', ')"
-    Write-Warning "Close all pwsh-preview / VS Code terminals and run: ./build.ps1 -Clean -Install"
+    Write-Warning "Close all pwsh / VS Code terminals and run: ./build.ps1 -Clean -Install"
 }
 
 # Check if DLL is outdated (locked copy from a previous build)
@@ -130,7 +130,7 @@ if ((Test-Path $sourceDll) -and (Test-Path $installedDll)) {
     $dstSize = (Get-Item $installedDll).Length
     if ($srcSize -ne $dstSize) {
         Write-Warning "CopilotShell.dll is locked (old: $dstSize bytes, new: $srcSize bytes)."
-        Write-Warning "Close all pwsh-preview / VS Code terminals and rerun: ./build.ps1 -Clean -Install"
+        Write-Warning "Close all pwsh / VS Code terminals and rerun: ./build.ps1 -Clean -Install"
     }
 }
 

@@ -76,12 +76,44 @@ if ($LASTEXITCODE -ne 0) { throw 'dotnet publish mcp-wrapper failed.' }
 # Copy module manifest and script files
 Copy-Item (Join-Path $projectDir 'CopilotShell.psd1') -Destination $stageDir -Force
 Copy-Item (Join-Path $projectDir 'Format-CopilotEvent.ps1') -Destination $stageDir -Force
+Copy-Item (Join-Path $projectDir 'StartupCheck.ps1') -Destination $stageDir -Force
 
 # ── Remove leftover runtime artifacts (just in case) ──
 $runtimesDir = Join-Path $stageDir 'runtimes'
 if (Test-Path $runtimesDir) {
     Remove-Item $runtimesDir -Recurse -Force
     Write-Host '  Removed runtimes/ folder (CLI binary not needed — auto-downloaded at runtime)' -ForegroundColor Yellow
+}
+
+# ── Move dependency DLLs to dependencies/ for ALC isolation ──
+# (see build.ps1 and StartupCheck.ps1 for details)
+Write-Host '📦 Moving dependencies to isolation directory...' -ForegroundColor Cyan
+$depsDir = Join-Path $stageDir 'dependencies'
+New-Item -ItemType Directory -Path $depsDir -Force | Out-Null
+
+$keepInRoot = @(
+    'CopilotShell.dll'
+    'CopilotShell.psd1'
+    'CopilotShell.xml'
+    'CopilotShell.deps.json'
+    'Format-CopilotEvent.ps1'
+    'StartupCheck.ps1'
+    'mcp-wrapper.dll'
+    'mcp-wrapper.exe'
+    'mcp-wrapper.deps.json'
+    'mcp-wrapper.runtimeconfig.json'
+)
+
+Get-ChildItem $stageDir -Filter '*.dll' -File |
+    Where-Object { $_.Name -notin $keepInRoot } |
+    Move-Item -Destination $depsDir -Force
+
+$languageDirs = @('cs','de','es','fr','it','ja','ko','pl','pt-BR','ru','tr','zh-Hans','zh-Hant')
+foreach ($lang in $languageDirs) {
+    $langDir = Join-Path $stageDir $lang
+    if (Test-Path $langDir) {
+        Move-Item $langDir -Destination $depsDir -Force
+    }
 }
 
 # ── Stamp build date ──

@@ -6,7 +6,7 @@
 .DESCRIPTION
     Publishes the CopilotShell C# project and copies the module manifest.
     With -Install, elevates to admin and runs install.ps1 to reinstall
-    into C:\Program Files\PowerShell\7-preview\Modules.
+    into C:\Program Files\PowerShell\Modules.
 
 .PARAMETER Clean
     Remove previous build output before building.
@@ -86,6 +86,47 @@ $buildDate = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 
 $formatCopilotEventSrc = Join-Path $projectDir 'Format-CopilotEvent.ps1'
 Copy-Item $formatCopilotEventSrc -Destination $outputDir -Force
+
+$startupCheckSrc = Join-Path $projectDir 'StartupCheck.ps1'
+Copy-Item $startupCheckSrc -Destination $outputDir -Force
+
+# ── Move dependency DLLs to dependencies/ for ALC isolation ──
+# When PowerShell loads a binary module, .NET's Assembly.LoadFrom probing loads
+# all DLLs in the same directory into the Default AssemblyLoadContext. This causes
+# type identity conflicts when the module bundles newer dependency versions than
+# the runtime (e.g. System.Text.Json 10.x vs host's 9.x). Moving deps to a
+# subdirectory prevents this — only our custom ALC loads them.
+Write-Host '📦 Moving dependencies to isolation directory...' -ForegroundColor Cyan
+$depsDir = Join-Path $outputDir 'dependencies'
+New-Item -ItemType Directory -Path $depsDir -Force | Out-Null
+
+# Files that MUST stay in the module root
+$keepInRoot = @(
+    'CopilotShell.dll'
+    'CopilotShell.psd1'
+    'CopilotShell.xml'
+    'CopilotShell.deps.json'
+    'Format-CopilotEvent.ps1'
+    'StartupCheck.ps1'
+    'mcp-wrapper.dll'
+    'mcp-wrapper.exe'
+    'mcp-wrapper.deps.json'
+    'mcp-wrapper.runtimeconfig.json'
+)
+
+# Move all dependency DLLs to dependencies/
+Get-ChildItem $outputDir -Filter '*.dll' -File |
+    Where-Object { $_.Name -notin $keepInRoot } |
+    Move-Item -Destination $depsDir -Force
+
+# Move satellite assembly directories (resource DLLs for StreamJsonRpc, etc.)
+$languageDirs = @('cs','de','es','fr','it','ja','ko','pl','pt-BR','ru','tr','zh-Hans','zh-Hant')
+foreach ($lang in $languageDirs) {
+    $langDir = Join-Path $outputDir $lang
+    if (Test-Path $langDir) {
+        Move-Item $langDir -Destination $depsDir -Force
+    }
+}
 
 Write-Host "✅ Build output: $outputDir" -ForegroundColor Green
 

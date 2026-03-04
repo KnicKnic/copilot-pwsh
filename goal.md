@@ -13,8 +13,8 @@ copilot cli doesnt allow you to replace the system prompt and I need this functi
 use the dotnet sdk - get more info https://github.com/github/copilot-sdk/blob/main/dotnet/README.md
 
 ## Platform
-- .NET 10 (net10.0) — required by GitHub.Copilot.SDK
-- PowerShell 7.5+ built on .NET 10 (pwsh preview/RC)
+- .NET 8+ (net8.0) — minimum required by GitHub.Copilot.SDK
+- PowerShell 7.4+ built on .NET 8+ (pwsh)
 - Cross-platform (Windows, macOS, Linux)
 
 ## Exposed capabilities
@@ -55,8 +55,8 @@ use the dotnet sdk - get more info https://github.com/github/copilot-sdk/blob/ma
 - `-SystemMessage` with `-SystemMessageMode Append|Replace` on `New-CopilotSession` and `Invoke-Copilot`
 
 ## Target
-- PowerShell 7.5+ (pwsh) on .NET 10 runtime
-- .NET 10
+- PowerShell 7.4+ (pwsh) on .NET 8+ runtime
+- .NET 8+
 
 ## Please provide simple install instructions
 and how to quickly rebuild and reinstall the module

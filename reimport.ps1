@@ -21,12 +21,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Check .NET runtime version — module requires .NET 10
+# Check .NET runtime version — module requires .NET 8+
 $fxVersion = [System.Environment]::Version
-if ($fxVersion.Major -lt 10) {
-    Write-Warning "Current pwsh runs on .NET $fxVersion. CopilotShell requires .NET 10+."
-    Write-Warning "Use pwsh 7.6 preview:  pwsh-preview -File $PSCommandPath"
-    throw "Incompatible .NET runtime. Need .NET 10+, have .NET $fxVersion."
+if ($fxVersion.Major -lt 8) {
+    Write-Warning "Current pwsh runs on .NET $fxVersion. CopilotShell requires .NET 8+."
+    Write-Warning "Install PowerShell 7.4+:  winget install Microsoft.PowerShell"
+    throw "Incompatible .NET runtime. Need .NET 8+, have .NET $fxVersion."
 }
 
 # Unload if loaded

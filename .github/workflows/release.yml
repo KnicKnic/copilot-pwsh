@@ -30,11 +30,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup .NET 10
+      - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
+          dotnet-version: '8.0.x'
 
       - name: Restore & Publish CopilotShell
         run: |
@@ -59,7 +58,27 @@ jobs:
         run: |
           cp src/CopilotShell.psd1 output/CopilotShell/
           cp src/Format-CopilotEvent.ps1 output/CopilotShell/
+          cp src/StartupCheck.ps1 output/CopilotShell/
         shell: bash
+
+      - name: Move dependencies to isolation directory
+        shell: pwsh
+        run: |
+          $outputDir = 'output/CopilotShell'
+          $depsDir = Join-Path $outputDir 'dependencies'
+          New-Item -ItemType Directory -Path $depsDir -Force | Out-Null
+          $keepInRoot = @(
+            'CopilotShell.dll','CopilotShell.psd1','CopilotShell.xml','CopilotShell.deps.json',
+            'Format-CopilotEvent.ps1','StartupCheck.ps1',
+            'mcp-wrapper.dll','mcp-wrapper.exe','mcp-wrapper.deps.json','mcp-wrapper.runtimeconfig.json'
+          )
+          Get-ChildItem $outputDir -Filter '*.dll' -File |
+            Where-Object { $_.Name -notin $keepInRoot } |
+            Move-Item -Destination $depsDir -Force
+          foreach ($lang in @('cs','de','es','fr','it','ja','ko','pl','pt-BR','ru','tr','zh-Hans','zh-Hant')) {
+            $langDir = Join-Path $outputDir $lang
+            if (Test-Path $langDir) { Move-Item $langDir -Destination $depsDir -Force }
+          }
 
       - name: Stamp build date
         shell: pwsh
@@ -131,24 +150,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup .NET 10
+      - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
-
-      # pwsh 7.6 is required because the module manifest specifies PowerShellVersion = '7.6'
-      # and Test-ModuleManifest checks the running host version. The NuGet 'PowerShell' dotnet
-      # tool only has 7.5.x — 7.6 previews are only published on GitHub Releases.
-      - name: Install PowerShell 7.6 preview
-        run: |
-          PWSH_VERSION="7.6.0-rc.1"
-          curl -fsSL "https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-linux-x64.tar.gz" -o /tmp/pwsh.tar.gz
-          sudo mkdir -p /opt/microsoft/powershell/7
-          sudo tar xzf /tmp/pwsh.tar.gz -C /opt/microsoft/powershell/7
-          sudo chmod +x /opt/microsoft/powershell/7/pwsh
-          sudo ln -sf /opt/microsoft/powershell/7/pwsh /usr/local/bin/pwsh
-          pwsh --version
+          dotnet-version: '8.0.x'
 
       - name: Publish to PSGallery
         shell: pwsh
