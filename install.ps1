@@ -136,6 +136,20 @@ if ((Test-Path $sourceDll) -and (Test-Path $installedDll)) {
 
 Write-Host '✅ Installed! Run:  Import-Module CopilotShell' -ForegroundColor Green
 
+# Warn if a user-scope module copy shadows the system install.
+# User Documents/PowerShell/Modules is checked BEFORE Program Files in PSModulePath.
+$userModuleDirs = @(
+    [IO.Path]::Combine([Environment]::GetFolderPath('MyDocuments'), 'PowerShell', 'Modules', 'CopilotShell')
+    if ($env:OneDrive) { [IO.Path]::Combine($env:OneDrive, 'Documents', 'PowerShell', 'Modules', 'CopilotShell') }
+)
+foreach ($userDir in $userModuleDirs | Select-Object -Unique) {
+    if ((Test-Path $userDir) -and $userDir -ne $installDir) {
+        Write-Warning "A user-scope module copy exists at: $userDir"
+        Write-Warning "This SHADOWS the system install at $installDir."
+        Write-Warning "Run: Remove-Item '$userDir' -Recurse -Force  (or update it manually)"
+    }
+}
+
 # Ensure the install directory is on PSModulePath for this session
 $modulesRoot = Split-Path $installDir
 if ($env:PSModulePath -notlike "*$modulesRoot*") {

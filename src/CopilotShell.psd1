@@ -1,6 +1,6 @@
 @{
     RootModule        = 'CopilotShell.dll'
-    ModuleVersion     = '0.2.0'
+    ModuleVersion     = '0.2.1'
     GUID              = 'a3b7c9d1-4e5f-6a7b-8c9d-0e1f2a3b4c5d'
     Author            = 'CopilotShell Contributors'
     CompanyName       = 'Community'

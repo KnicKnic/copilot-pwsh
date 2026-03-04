@@ -951,4 +951,4 @@ Invoke-Copilot "Check the deployment status" `
 
 ---
 
-*CopilotShell v0.2.0 — PowerShell meets AI orchestration*
+*CopilotShell v0.2.1 — PowerShell meets AI orchestration*
