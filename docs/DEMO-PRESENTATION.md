@@ -422,6 +422,103 @@ An alert fired for service 'payments-api'.
 
 ---
 
+## Demo 8: Task Runner with Verification — `Invoke-CopilotTask.ps1`
+
+The `tools/Invoke-CopilotTask.ps1` script wraps the full CopilotShell lifecycle into a
+**self-contained task runner** with built-in success verification. It handles MCP config
+generation, agent file resolution, run tracking, and multi-turn verification — all in one call.
+
+### Generate a Report, Verify It Was Written, and Confirm Success
+
+```powershell
+# Single command: generate a report, send a follow-up to ensure it's at the right path,
+# and ask a yes/no question to verify success — all tracked in .copilot_runs/
+# -RunOnce ensures it won't re-execute if a previous run already succeeded.
+.\tools\Invoke-CopilotTask.ps1 `
+    -PrependPrompt "Generate a detailed incident report for the payments-api outage on 2026-03-04. Include error rates, root cause analysis, affected services, and remediation steps. Write the report to ./reports/incident-2026-03-04.md" `
+    -AdditionalPrompts @(
+        "Ensure you wrote the full incident report to ./reports/incident-2026-03-04.md — if the file is missing or incomplete, create or complete it now."
+    ) `
+    -promptSuccessYesNoQuestion "Did you successfully write the complete incident report to ./reports/incident-2026-03-04.md? Answer only Yes or No." `
+    -McpConfigSource .vscode/mcp.json `
+    -AgentFile .github/agents/incident-responder.agent.md `
+    -Name "incident-report/2026-03-04" `
+    -Model claude-sonnet-4.6 `
+    -RunOnce
+```
+
+### What happens under the hood
+
+```
+Step 0: RunOnce check
+  → Checks .copilot_runs/incident-report/2026-03-04/run_details.json
+  → If previous run succeeded with same version → skip entirely
+  → Otherwise → proceed with execution
+
+Step 1: Main prompt (streamed)
+  → "Generate a detailed incident report..."
+  → AI uses MCP tools (Grafana, ADO, Kusto), writes the file
+
+Step 2: Additional prompt (streamed)
+  → "Ensure you wrote the full incident report to ./reports/incident-2026-03-04.md..."
+  → AI verifies or fixes the file
+
+Step 3: Yes/No verification (non-streamed → plain text)
+  → "Did you successfully write the complete incident report...?"
+  → AI responds "Yes" or "No"
+  → Script interprets the answer and sets success=$true or $false
+
+Step 4: Run details saved to .copilot_runs/incident-report/2026-03-04/
+  → run_details.json   (success flag, duration, model, session ID, git info)
+  → prompt.txt         (the full prompt sent)
+  → pwsh_capture.md    (streaming log of all AI output and tool calls)
+  → mcp-config.json    (snapshot of the MCP config used)
+```
+
+### Key features
+
+| Feature | How |
+|---|---|
+| **Multi-step prompts** | `-AdditionalPrompts` sends follow-up messages in the same session |
+| **Success verification** | `-promptSuccessYesNoQuestion` asks a yes/no question and interprets the answer |
+| **Run tracking** | All artifacts saved to `.copilot_runs/<Name>/` with full metadata |
+| **Idempotent re-runs** | `-RunOnce` skips execution if a previous run succeeded with the same `-Version` |
+| **Pre-flight check** | `-Check` returns `$true/$false` without running (for CI/CD gates) |
+| **MCP config auto-generation** | Converts `.vscode/mcp.json` format to CLI format automatically |
+| **Agent file resolution** | Auto-discovers `.github/agents/<name>.agent.md` from agent name |
+
+### Use in CI/CD with idempotent runs
+
+```powershell
+# First run: executes the task
+.\tools\Invoke-CopilotTask.ps1 `
+    -PrependPrompt "Generate the weekly metrics report and write it to ./reports/weekly.md" `
+    -AdditionalPrompts @("Make sure the report is saved to ./reports/weekly.md") `
+    -promptSuccessYesNoQuestion "Did you write the report to ./reports/weekly.md? Yes or No." `
+    -Name "weekly-report" -Version "2026-w10" -RunOnce
+
+# Second run: skips — already succeeded with same version
+.\tools\Invoke-CopilotTask.ps1 `
+    -PrependPrompt "Generate the weekly metrics report and write it to ./reports/weekly.md" `
+    -AdditionalPrompts @("Make sure the report is saved to ./reports/weekly.md") `
+    -promptSuccessYesNoQuestion "Did you write the report to ./reports/weekly.md? Yes or No." `
+    -Name "weekly-report" -Version "2026-w10" -RunOnce
+# → "Skipping - previous run was successful with same version (2026-w10)"
+```
+
+### Check a previous run without re-executing
+
+```powershell
+# Returns $true if the previous run succeeded with the given version
+$ok = .\tools\Invoke-CopilotTask.ps1 -Name "incident-report/2026-03-04" -Version "0" -Check
+if (-not $ok) {
+    Write-Error "Incident report task has not completed successfully"
+    exit 1
+}
+```
+
+---
+
 # Architecture Deep Dive
 
 ---
