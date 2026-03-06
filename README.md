@@ -24,6 +24,12 @@ Install-Module CopilotShell
 
 The Copilot CLI binary is **automatically downloaded** on first use — no manual setup needed. It's cached in your user profile so subsequent runs start instantly.
 
+> **First-run setup:** Before using CopilotShell, you must run the Copilot CLI manually once to authenticate and obtain an auth token:
+> ```powershell
+> copilot  # or: & "$env:LOCALAPPDATA\copilot-cli\copilot.exe"
+> ```
+> Follow the login prompts to sign in with your GitHub account. Once authenticated, CopilotShell will reuse the cached token.
+
 > Requires [PowerShell 7.4+](https://github.com/PowerShell/PowerShell/releases). Install with: `winget install Microsoft.PowerShell`
 
 ### From source

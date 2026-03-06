@@ -94,6 +94,12 @@ Invoke-Copilot "What is the capital of France?"
 The `copilot.exe` binary is **automatically downloaded** from npm on first run and cached locally.
 No `npm install`, no PATH setup, no manual downloads.
 
+> **First-run setup:** You must run the Copilot CLI manually once to log in and obtain an auth token:
+> ```powershell
+> copilot
+> ```
+> Follow the prompts to sign in with your GitHub account. After that, CopilotShell reuses the cached token.
+
 ---
 
 ## Demo 2: Reuse Your VS Code Agent Files
