@@ -2,6 +2,8 @@
 
 A cross-platform PowerShell 7+ module that wraps the [GitHub Copilot SDK](https://github.com/github/copilot-sdk) to give you full programmatic control over GitHub Copilot CLI — including **custom system messages**, **streaming**, **session management**, and **timeout/turn limits**.
 
+*Related:* [Copilot Dash](https://github.com/KnicKnic/copilot-dash) a visualizer with browser extension that can embed runs & results along side websites.
+
 ## Requirements
 
 | Requirement | Version |
@@ -299,3 +301,4 @@ This module runs on Windows, macOS, and Linux wherever .NET 8+ and PowerShell 7.
 ## License
 
 MIT
+
