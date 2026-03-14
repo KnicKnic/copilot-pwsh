@@ -1,10 +1,10 @@
 // ============================================================================
-// Test: MCP server tools via agent with Tools = ["github-mcp-server"]
+// Test: MCP tools via agent with Tools = ["test-mcp"] (bare server name)
 // ============================================================================
 //
-// An agent is configured with Tools = ["github-mcp-server"] (bare MCP server
-// name). The agent is selected via Rpc.Agent.SelectAsync. The model should
-// see the MCP server's tools through the agent's tool scope.
+// An agent is configured with Tools = ["test-mcp"] (bare MCP server name).
+// The agent is selected via Rpc.Agent.SelectAsync. The model should see the
+// MCP server's tools through the agent's tool scope.
 //
 // Run:  dotnet run -- McpToolAgentScoped
 // ============================================================================
@@ -15,33 +15,32 @@ public class McpToolAgentScoped : IBugRepro
 {
     public bool ExpectsFail => true;
     public string Description =>
-        "Agent with Tools = [\"github-mcp-server\"] selected via Rpc.Agent.SelectAsync: MCP tools should be exposed";
+        "Agent with Tools = [\"test-mcp\"] selected via SelectAsync: MCP tools should be exposed";
 
     public async Task<int> RunAsync(string cliPath)
     {
-        var mcpServer = new McpRemoteServerConfig
-        {
-            Url = "https://api.enterprise.githubcopilot.com/mcp/readonly",
-            Type = "http",
-            Tools = new List<string> { "*" }
-        };
+        var project = TestMcpServerHelper.ResolveTestServerProject();
+        if (project is null) return 2;
+
+        var serverTools = await TestMcpServerHelper.ValidateTestServerAsync(project);
+        if (serverTools is null) return 2;
+
+        var mcpServer = TestMcpServerHelper.CreateMcpConfig(project);
 
         var agent = new CustomAgentConfig
         {
             Name = "mcp-agent",
-            Description = "Agent with access to github-mcp-server tools",
-            Prompt = "You have access to github-mcp-server tools. When asked to list tools, output ONLY a comma-separated list of tool names.",
-            Tools = new List<string> { "github-mcp-server" }
+            Description = "Agent with access to test-mcp tools",
+            Prompt = "You have access to test MCP server tools. When asked to list tools, output ONLY a comma-separated list of tool names.",
+            Tools = new List<string> { TestMcpServerHelper.McpServerName }
         };
 
-        Console.WriteLine($"MCP server: github-mcp-server");
-        Console.WriteLine($"  Type: {mcpServer.Type}");
-        Console.WriteLine($"  URL:  {mcpServer.Url}");
+        Console.WriteLine($"MCP server: {TestMcpServerHelper.McpServerName}");
+        Console.WriteLine($"  Command: {mcpServer.Command} {string.Join(" ", mcpServer.Args!)}");
         Console.WriteLine($"Agent: {agent.Name}");
         Console.WriteLine($"  Tools: [{string.Join(", ", agent.Tools!)}]");
         Console.WriteLine();
 
-        Console.WriteLine($"Starting client with CLI: {cliPath}");
         await using var client = new CopilotClient(new CopilotClientOptions { CliPath = cliPath });
         await client.StartAsync();
 
@@ -50,7 +49,7 @@ public class McpToolAgentScoped : IBugRepro
             Model = "gpt5-mini",
             McpServers = new Dictionary<string, object>
             {
-                ["github-mcp-server"] = mcpServer
+                [TestMcpServerHelper.McpServerName] = mcpServer
             },
             CustomAgents = new List<CustomAgentConfig> { agent },
             OnPermissionRequest = PermissionHandler.ApproveAll,
@@ -67,8 +66,7 @@ public class McpToolAgentScoped : IBugRepro
         Console.WriteLine();
 
         Console.WriteLine("Asking model to list all its tools...");
-        var response = await QueryAsync(session,
-            "List every tool name you have access to. Output ONLY a comma-separated list of tool names, nothing else. No descriptions, no categories, no markdown.");
+        var response = await TestMcpServerHelper.QueryAsync(session, TestMcpServerHelper.ListToolsPrompt);
 
         Console.WriteLine();
         Console.WriteLine("--- Model Response ---");
@@ -76,70 +74,6 @@ public class McpToolAgentScoped : IBugRepro
         Console.WriteLine("--- End Response ---");
         Console.WriteLine();
 
-        // Parse reported tools
-        var ignoredTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "skill", "report_intent" };
-        var reportedTools = response
-            .Split(new[] { ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(t => !string.IsNullOrWhiteSpace(t) && !ignoredTools.Contains(t))
-            .ToList();
-
-        Console.WriteLine($"Tools reported: {reportedTools.Count} (ignoring {string.Join(", ", ignoredTools)})");
-        foreach (var t in reportedTools)
-            Console.WriteLine($"  - {t}");
-        Console.WriteLine();
-
-        // Validate expected MCP tools
-        var expectedMcpTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "github-mcp-server-actions_list", "github-mcp-server-actions_get", "github-mcp-server-get_job_logs",
-            "github-mcp-server-list_pull_requests", "github-mcp-server-search_pull_requests",
-            "github-mcp-server-pull_request_read", "github-mcp-server-list_issues", "github-mcp-server-search_issues",
-            "github-mcp-server-issue_read", "github-mcp-server-list_commits", "github-mcp-server-get_commit",
-            "github-mcp-server-list_branches", "github-mcp-server-search_code", "github-mcp-server-search_repositories",
-            "github-mcp-server-get_file_contents", "github-mcp-server-search_users", "github-mcp-server-list_copilot_spaces",
-            "github-mcp-server-get_copilot_space"
-        };
-
-        var found = reportedTools.Where(t => expectedMcpTools.Contains(t)).ToList();
-        var missing = expectedMcpTools.Where(t => !reportedTools.Contains(t, StringComparer.OrdinalIgnoreCase)).ToList();
-
-        Console.WriteLine($"Expected MCP tools: {expectedMcpTools.Count}");
-        Console.WriteLine($"Found:   {found.Count}");
-        Console.WriteLine($"Missing: {missing.Count}");
-
-        if (missing.Count > 0)
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("Missing MCP tools:");
-            foreach (var t in missing)
-                Console.WriteLine($"  - {t}");
-            Console.ResetColor();
-            return 1;
-        }
-
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine("All expected MCP tools present.");
-        Console.ResetColor();
-        return 0;
-    }
-
-    private static async Task<string> QueryAsync(CopilotSession session, string prompt)
-    {
-        var done = new TaskCompletionSource();
-        string? content = null;
-        using var sub = session.On(evt =>
-        {
-            switch (evt)
-            {
-                case AssistantMessageEvent msg: content = msg.Data.Content; break;
-                case SessionIdleEvent: done.TrySetResult(); break;
-                case SessionErrorEvent err: done.TrySetException(new Exception(err.Data.Message)); break;
-            }
-        });
-        await session.SendAsync(new MessageOptions { Prompt = prompt });
-        var completed = await Task.WhenAny(done.Task, Task.Delay(TimeSpan.FromSeconds(120)));
-        if (completed != done.Task) throw new TimeoutException("Timed out waiting for response");
-        await done.Task;
-        return content?.Trim() ?? "";
+        return TestMcpServerHelper.ValidateToolResponse(response, TestMcpServerHelper.PrefixedToolNames);
     }
 }

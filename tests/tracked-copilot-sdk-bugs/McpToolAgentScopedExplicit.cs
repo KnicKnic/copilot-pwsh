@@ -1,20 +1,21 @@
 // ============================================================================
-// Test: MCP server with AvailableTools = ["test-mcp"] (bare server name)
+// Test: MCP tools via agent with explicit tool list (local test server)
 // ============================================================================
 //
-// Attaches a local test MCP server and sets SessionConfig.AvailableTools to
-// the bare server name. The CLI should expose the MCP tools to the model.
+// An agent is configured with Tools listing all 3 test MCP tools by their full
+// prefixed names (test-mcp-alpha, test-mcp-beta, test-mcp-gamma). The agent is
+// selected via Rpc.Agent.SelectAsync. The model should see exactly those tools.
 //
-// Run:  dotnet run -- McpToolSpecified
+// Run:  dotnet run -- McpToolAgentScopedExplicit
 // ============================================================================
 
 using GitHub.Copilot.SDK;
 
-public class McpToolSpecified : IBugRepro
+public class McpToolAgentScopedExplicit : IBugRepro
 {
     public bool ExpectsFail => true;
     public string Description =>
-        "MCP server with AvailableTools = [\"test-mcp\"]: tools should be exposed";
+        "Agent with explicit local MCP tool names via SelectAsync: MCP tools should be exposed";
 
     public async Task<int> RunAsync(string cliPath)
     {
@@ -26,9 +27,18 @@ public class McpToolSpecified : IBugRepro
 
         var mcpServer = TestMcpServerHelper.CreateMcpConfig(project);
 
+        var agent = new CustomAgentConfig
+        {
+            Name = "mcp-agent-explicit",
+            Description = "Agent with explicit test MCP tool names",
+            Prompt = "You have access to test MCP server tools. When asked to list tools, output ONLY a comma-separated list of tool names.",
+            Tools = new List<string>(TestMcpServerHelper.PrefixedToolNames)
+        };
+
         Console.WriteLine($"MCP server: {TestMcpServerHelper.McpServerName}");
         Console.WriteLine($"  Command: {mcpServer.Command} {string.Join(" ", mcpServer.Args!)}");
-        Console.WriteLine($"  AvailableTools: [\"{TestMcpServerHelper.McpServerName}\"]");
+        Console.WriteLine($"Agent: {agent.Name}");
+        Console.WriteLine($"  Tools ({agent.Tools!.Count}): [{string.Join(", ", agent.Tools)}]");
         Console.WriteLine();
 
         await using var client = new CopilotClient(new CopilotClientOptions { CliPath = cliPath });
@@ -41,13 +51,18 @@ public class McpToolSpecified : IBugRepro
             {
                 [TestMcpServerHelper.McpServerName] = mcpServer
             },
-            AvailableTools = new List<string> { TestMcpServerHelper.McpServerName },
+            CustomAgents = new List<CustomAgentConfig> { agent },
             OnPermissionRequest = PermissionHandler.ApproveAll,
         };
 
-        Console.WriteLine("Creating session with MCP server + AvailableTools...");
+        Console.WriteLine("Creating session...");
         await using var session = await client.CreateSessionAsync(sessionConfig);
         Console.WriteLine("Session created.");
+        Console.WriteLine();
+
+        Console.WriteLine("Selecting agent 'mcp-agent-explicit' via Rpc.Agent.SelectAsync...");
+        await session.Rpc.Agent.SelectAsync("mcp-agent-explicit");
+        Console.WriteLine("Agent selected.");
         Console.WriteLine();
 
         Console.WriteLine("Asking model to list all its tools...");

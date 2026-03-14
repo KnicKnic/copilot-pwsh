@@ -1,20 +1,21 @@
 // ============================================================================
-// Test: MCP server with AvailableTools = ["test-mcp"] (bare server name)
+// Test: MCP tools with explicit AvailableTools (no agent, local test server)
 // ============================================================================
 //
 // Attaches a local test MCP server and sets SessionConfig.AvailableTools to
-// the bare server name. The CLI should expose the MCP tools to the model.
+// the full prefixed tool names (test-mcp-alpha, test-mcp-beta, test-mcp-gamma).
+// No agent is used. The CLI should expose exactly those MCP tools to the model.
 //
-// Run:  dotnet run -- McpToolSpecified
+// Run:  dotnet run -- McpToolExplicit
 // ============================================================================
 
 using GitHub.Copilot.SDK;
 
-public class McpToolSpecified : IBugRepro
+public class McpToolExplicit : IBugRepro
 {
-    public bool ExpectsFail => true;
+    public bool ExpectsFail => false;
     public string Description =>
-        "MCP server with AvailableTools = [\"test-mcp\"]: tools should be exposed";
+        "MCP server with explicit AvailableTools (no agent): tools should be exposed";
 
     public async Task<int> RunAsync(string cliPath)
     {
@@ -28,7 +29,7 @@ public class McpToolSpecified : IBugRepro
 
         Console.WriteLine($"MCP server: {TestMcpServerHelper.McpServerName}");
         Console.WriteLine($"  Command: {mcpServer.Command} {string.Join(" ", mcpServer.Args!)}");
-        Console.WriteLine($"  AvailableTools: [\"{TestMcpServerHelper.McpServerName}\"]");
+        Console.WriteLine($"  AvailableTools ({TestMcpServerHelper.PrefixedToolNames.Count}): [{string.Join(", ", TestMcpServerHelper.PrefixedToolNames)}]");
         Console.WriteLine();
 
         await using var client = new CopilotClient(new CopilotClientOptions { CliPath = cliPath });
@@ -41,11 +42,11 @@ public class McpToolSpecified : IBugRepro
             {
                 [TestMcpServerHelper.McpServerName] = mcpServer
             },
-            AvailableTools = new List<string> { TestMcpServerHelper.McpServerName },
+            AvailableTools = new List<string>(TestMcpServerHelper.PrefixedToolNames),
             OnPermissionRequest = PermissionHandler.ApproveAll,
         };
 
-        Console.WriteLine("Creating session with MCP server + AvailableTools...");
+        Console.WriteLine("Creating session with explicit MCP tool names in AvailableTools...");
         await using var session = await client.CreateSessionAsync(sessionConfig);
         Console.WriteLine("Session created.");
         Console.WriteLine();
