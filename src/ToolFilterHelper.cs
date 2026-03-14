@@ -382,8 +382,34 @@ internal static class ToolFilterHelper
                 // Tool scoping is enforced at the session level instead.
                 agent.Tools = null;
             }
-            // else: agent only uses VS Code/core tool names — leave Tools as-is
-            // (the SDK will use it as an allowlist for built-in tools)
+            else
+            {
+                // Agent only uses VS Code/core tool names — translate VS Code names
+                // to CLI equivalents so the CLI can match them.
+                var translated = new List<string>();
+                foreach (var pattern in agent.Tools)
+                {
+                    if (VsCodeToolMappings.TryGetValue(pattern, out var mapped))
+                    {
+                        translated.AddRange(mapped);
+                        continue;
+                    }
+                    var normalized = pattern.Replace('/', '-');
+                    if (VsCodeToolMappings.TryGetValue(normalized, out var mappedNorm))
+                    {
+                        translated.AddRange(mappedNorm);
+                        continue;
+                    }
+                    if (Shorthands.TryGetValue(normalized, out var shorthandTools))
+                    {
+                        translated.AddRange(shorthandTools);
+                        continue;
+                    }
+                    // Pass through as-is (core tool name or unknown)
+                    translated.Add(normalized);
+                }
+                agent.Tools = translated.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            }
         }
     }
 
