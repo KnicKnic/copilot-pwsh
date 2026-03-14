@@ -285,9 +285,7 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
         // Auto-approve tool permission requests using the SDK's built-in handler
         sessionConfig.OnPermissionRequest = PermissionHandler.ApproveAll;
 
-        await using var session = await client.CreateSessionAsync(sessionConfig);
-
-        // Select agent if specified
+        // Pre-select agent at session creation (SDK 0.1.33+)
         // Priority: explicit -Agent > prompt file agent > auto-select single custom agent
         var agentToSelect = MyInvocation.BoundParameters.ContainsKey(nameof(Agent)) ? Agent : null;
         if (agentToSelect is null && promptFileResult?.Agent is not null)
@@ -302,9 +300,11 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
         }
         if (agentToSelect is not null)
         {
-            WriteVerbose($"Selecting agent: {agentToSelect}");
-            await session.Rpc.Agent.SelectAsync(agentToSelect, cancellationToken);
+            sessionConfig.Agent = agentToSelect;
+            WriteVerbose($"Pre-selecting agent: {agentToSelect}");
         }
+
+        await using var session = await client.CreateSessionAsync(sessionConfig);
 
         // --- Message options ---
         var msgOpts = new MessageOptions { Prompt = effectivePrompt };
