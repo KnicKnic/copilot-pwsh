@@ -50,6 +50,7 @@ PowerShell 7+ binary module (C#) wrapping the GitHub Copilot SDK for .NET. Targe
 ## Testing
 - `test.ps1` runs smoke tests: one-shot `Invoke-Copilot` and a full client+session workflow.
 - Run tests with pwsh 7.4+: `pwsh -File test.ps1`.
+- `tests/` contains targeted bug-repro and validation tests. **Do not run these automatically** — only run when the user explicitly asks. Each test is self-contained with its own documentation header.
 
 ## Key Constraints
 - .NET 8+ and pwsh 7.4+ are **required**.
