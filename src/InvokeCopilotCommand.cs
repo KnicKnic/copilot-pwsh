@@ -195,7 +195,7 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
             WriteVerbose($"Registered {allAgents.Count} custom agent(s): {string.Join(", ", allAgents.Select(a => a.Name))}");
         }
 
-        // Load MCP config (needed for both McpServers and tool discovery)
+        // Load MCP config
         Dictionary<string, object>? mcpConfig = null;
 
         // Determine effective tool filter for MCP server scoping.
@@ -233,11 +233,15 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
             sessionConfig.McpServers = filtered;
         }
 
-        // Discover MCP tools dynamically for servers referenced by -AvailableTools or agent tool patterns
+        // Pass AvailableTools to session — either explicit or derived from agent tool refs.
+        // Wildcards (ado-*) and bare server names (ado) need discovery to expand to exact names.
+        // GetAllToolRefsFromAgents includes translated VS Code tools + MCP patterns.
+        var agentAllRefs = ToolFilterHelper.GetAllToolRefsFromAgents(allAgents);
+        var sessionTools = AvailableTools ?? agentAllRefs;
         Dictionary<string, List<string>>? discoveredTools = null;
-        if (mcpConfig is not null)
+        if (sessionTools is not null && mcpConfig is not null)
         {
-            var serversToDiscover = ToolFilterHelper.GetServersNeedingDiscovery(effectiveToolFilter, mcpConfig);
+            var serversToDiscover = ToolFilterHelper.GetServersNeedingDiscovery(sessionTools, mcpConfig);
             if (serversToDiscover.Count > 0)
             {
                 WriteVerbose($"Discovering tools from MCP servers: {string.Join(", ", serversToDiscover)}");
@@ -255,12 +259,7 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
                 }
             }
         }
-
-        // Expand wildcards/server names into exact tool names for session-level scoping.
-        // When agent MCP refs exist but no explicit -AvailableTools, use agent refs as the
-        // session AvailableTools so the model only sees core tools + referenced MCP tools.
-        var sessionToolSource = AvailableTools ?? agentMcpRefs;
-        var mergedTools = ToolFilterHelper.ExpandToolPatterns(sessionToolSource, discoveredTools);
+        var mergedTools = ToolFilterHelper.ExpandToolPatterns(sessionTools, discoveredTools);
         if (mergedTools is not null)
         {
             sessionConfig.AvailableTools = mergedTools;
@@ -268,16 +267,15 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
         }
         if (ExcludedTools is not null) sessionConfig.ExcludedTools = new List<string>(ExcludedTools);
 
-        // Process agent tool lists: clear MCP-referencing Tools so agent inherits
-        // session tools (CLI applies agent.Tools filter before MCP servers connect)
-        ToolFilterHelper.ExpandAgentTools(allAgents, discoveredTools);
+        // Translate VS Code tool names and expand MCP patterns per-agent
+        ToolFilterHelper.TranslateAgentTools(allAgents, discoveredTools);
         if (allAgents != null)
         {
             foreach (var agent in allAgents)
             {
-                if (agent.Tools == null)
-                    WriteVerbose($"Agent '{agent.Name}' tools: <session-scoped> (MCP references detected)");
-                else if (agent.Tools.Count > 0)
+                if (agent.Tools == null || agent.Tools.Count == 0)
+                    WriteVerbose($"Agent '{agent.Name}' tools: <all session tools>");
+                else
                     WriteVerbose($"Agent '{agent.Name}' tools ({agent.Tools.Count}): {string.Join(", ", agent.Tools.Order())}");
             }
         }
@@ -302,6 +300,16 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
         {
             sessionConfig.Agent = agentToSelect;
             WriteVerbose($"Pre-selecting agent: {agentToSelect}");
+
+            // Narrow session AvailableTools to the selected agent's scoped tools.
+            // The CLI enforces visibility at the session level, not per-agent.
+            var selectedAgent = allAgents?.FirstOrDefault(a =>
+                string.Equals(a.Name, agentToSelect, StringComparison.OrdinalIgnoreCase));
+            if (selectedAgent?.Tools is { Count: > 0 })
+            {
+                sessionConfig.AvailableTools = selectedAgent.Tools;
+                WriteVerbose($"Narrowed session tools to agent '{agentToSelect}' ({selectedAgent.Tools.Count} tools)");
+            }
         }
 
         await using var session = await client.CreateSessionAsync(sessionConfig);
