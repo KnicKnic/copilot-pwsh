@@ -26,11 +26,16 @@ Install-Module CopilotShell
 
 The Copilot CLI binary is **automatically downloaded** on first use — no manual setup needed. It's cached in your user profile so subsequent runs start instantly.
 
-> **First-run setup:** Before using CopilotShell, you must run the Copilot CLI manually once to authenticate and obtain an auth token:
+> **First-run setup:** Authenticate with GitHub before first use:
 > ```powershell
-> copilot  # or: & "$env:LOCALAPPDATA\copilot-cli\copilot.exe"
+> Connect-Copilot
 > ```
-> Follow the login prompts to sign in with your GitHub account. Once authenticated, CopilotShell will reuse the cached token.
+> This downloads the correct CLI version (if needed) and runs the OAuth device flow. Follow the prompts to sign in with your GitHub account. Once authenticated, CopilotShell reuses the cached token.
+>
+> For GitHub Enterprise Cloud with data residency:
+> ```powershell
+> Connect-Copilot -GitHubHost "https://example.ghe.com"
+> ```
 
 > Requires [PowerShell 7.4+](https://github.com/PowerShell/PowerShell/releases). Install with: `winget install Microsoft.PowerShell`
 
@@ -86,6 +91,12 @@ Import-Module CopilotShell
 |---|---|
 | `Send-CopilotMessage` | Send a prompt; returns final text or streams events with `-Stream` |
 | `Format-CopilotEvent` | Format streaming events with colors and icons (filter function) |
+
+### Authentication
+
+| Cmdlet | Description |
+|---|---|
+| `Connect-Copilot` | Authenticate with GitHub Copilot via OAuth device flow (`-GitHubHost` for GHE) |
 
 ### Convenience
 
@@ -286,6 +297,7 @@ copilot-sdk/
     ├── SessionCmdlets.cs      # New/Get/Resume/Remove/Stop/Disconnect-CopilotSession + Get-CopilotSessionMessages
     ├── MessageCmdlets.cs      # Send-CopilotMessage, Wait-CopilotSession
     ├── InvokeCopilotCommand.cs # Invoke-Copilot (one-shot convenience)
+    ├── LoginCmdlet.cs         # Connect-Copilot (authentication)
     ├── CliPathResolver.cs     # Auto-detect bundled copilot.exe
     ├── McpConfigLoader.cs     # Parse MCP JSON configs
     ├── McpToolDiscovery.cs    # Dynamic MCP tool discovery via tools/list protocol

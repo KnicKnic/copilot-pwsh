@@ -18,6 +18,7 @@ PowerShell 7+ binary module (C#) wrapping the GitHub Copilot SDK for .NET. Targe
 - **SessionCmdlets.cs** — `New/Get/Resume/Remove/Stop/Disconnect-CopilotSession`, `Get-CopilotSessionMessages`. Accepts `-McpConfigFile` as `FileInfo` (enables tab completion). `-NoMcpWrapper` disables the MCP wrapper.
 - **MessageCmdlets.cs** — `Send-CopilotMessage`, `Wait-CopilotSession`. Streaming uses `await foreach` over SDK events.
 - **InvokeCopilotCommand.cs** — One-shot convenience cmdlet. Manages full client+session lifecycle.
+- **LoginCmdlet.cs** — `Connect-Copilot`. Resolves/downloads the correct CLI version and runs `copilot login` interactively for OAuth device flow authentication. Supports `-GitHubHost` for GHE.
 - **CliPathResolver.cs** — Resolves `runtimes/<rid>/native/copilot[.exe]` relative to the assembly location.
 - **McpConfigLoader.cs** — Parses MCP JSON config files into SDK `McpLocalServerConfig`/`McpRemoteServerConfig` objects. Defaults `Tools=["*"]`, `Type="stdio"`. Skips `"disabled": true` entries.
 - **ToolFilterHelper.cs** — Manages tool filtering with dynamic MCP tool discovery. When `-AvailableTools` is specified, core CLI tools are always included. Wildcard patterns (`ado-*`) and bare server names (`ado`) are expanded against dynamically discovered MCP tools via `McpToolDiscovery`. MCP servers not referenced in `-AvailableTools` are excluded from the session.

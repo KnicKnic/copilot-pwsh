@@ -94,11 +94,14 @@ Invoke-Copilot "What is the capital of France?"
 The `copilot.exe` binary is **automatically downloaded** from npm on first run and cached locally.
 No `npm install`, no PATH setup, no manual downloads.
 
-> **First-run setup:** You must run the Copilot CLI manually once to log in and obtain an auth token:
+> **First-run setup:** Authenticate with GitHub before first use:
 > ```powershell
-> copilot
+> Connect-Copilot
 > ```
+> This downloads the correct CLI version (if needed) and runs the OAuth device flow.
 > Follow the prompts to sign in with your GitHub account. After that, CopilotShell reuses the cached token.
+>
+> For GitHub Enterprise Cloud: `Connect-Copilot -GitHubHost "https://example.ghe.com"`
 
 ---
 
@@ -801,7 +804,12 @@ Everything else   ██                                         208ms   (2.5%)
 
 ## The Cmdlet Surface
 
-### 18 cmdlets — PowerShell-idiomatic, composable
+### 19 cmdlets — PowerShell-idiomatic, composable
+
+**Authentication:**
+```
+Connect-Copilot  ← OAuth device flow login (auto-downloads CLI if needed)
+```
 
 **Client lifecycle:**
 ```
@@ -1037,6 +1045,7 @@ Invoke-Copilot "Check the deployment status" `
 | **MCP tool filtering** | `-AvailableTools` with wildcards, dynamic discovery |
 | **Persistent MCP servers** | Zombie daemon via `mcp-wrapper` (auto) |
 | **MCP env var fix** | Transparent wrapping via `mcp-wrapper` (auto) |
+| **Authentication** | `Connect-Copilot` — OAuth device flow, GHE support |
 | **Auto CLI download** | First-run download from npm, cached locally |
 | **Assembly isolation** | Custom ALC with pre-loaded dependencies |
 | **Async in PowerShell** | `AsyncPSCmdlet` message pump pattern |

@@ -46,6 +46,9 @@
         # Convenience
         'Invoke-Copilot'
 
+        # Authentication
+        'Connect-Copilot'
+
         # MCP daemon management
         'Reset-CopilotMcpDaemon'
     )
