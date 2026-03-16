@@ -346,12 +346,13 @@ try{
     try{
         $customAgentsArg = if ($resolvedAgentFiles.Count -gt 0) { @{"-CustomAgentFile" = $resolvedAgentFiles} } else { @{} }
         $agentName = if ($agentArgs.Count -gt 1) { $agentArgs[1] } else { $null }
+        $agentSelectArg = if ($agentName) { @{"-Agent" = $agentName} } else { @{} }
         try {
             $session = New-CopilotSession $client `
                 -SystemMessage $SystemMessage `
                 -SystemMessageMode Replace `
                 -McpConfigFile $mcpConfigDest `
-                -InfiniteSessions -Model $Model -stream @customAgentsArg
+                -InfiniteSessions -Model $Model -stream @customAgentsArg @agentSelectArg
         } catch {
             throw "New-CopilotSession failed: $_"
         }
@@ -364,9 +365,8 @@ try{
         }
         
         try{
-    $agentArg = if ($agentArgs.Count -gt 1) { @{"-Agent" = $agentArgs[1]} } else { @{} }
     try {
-        Send-CopilotMessage $session @agentArg -prompt $prompt -timeout $(30*60) -stream | Format-CopilotEvent -LogFile "$runDetailsDir/pwsh_capture.md" | Out-Null
+        Send-CopilotMessage $session -prompt $prompt -timeout $(30*60) -stream | Format-CopilotEvent -LogFile "$runDetailsDir/pwsh_capture.md" | Out-Null
     } catch {
         throw "Send-CopilotMessage (main prompt) failed: $_"
     }
