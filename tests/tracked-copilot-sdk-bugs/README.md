@@ -32,12 +32,30 @@ dotnet run -- --list
 
 | Test | ExpectsFail | Description |
 |------|:-----------:|-------------|
-| **AgentToolScopingPostSelect** | No | Agent selected post-creation via `Rpc.Agent.SelectAsync()` — `CustomAgentConfig.Tools` should restrict tool visibility but doesn't. |
-| **AgentToolScopingSessionAgent** | Yes | Agent pre-selected via `SessionConfig.Agent` — `CustomAgentConfig.Tools` should restrict tool visibility but doesn't. |
+| **AgentToolScopingPostSelect** | No | Agent selected post-creation via `Rpc.Agent.SelectAsync()` — `CustomAgentConfig.Tools` correctly restricts tool visibility. |
+| **AgentToolScopingSessionAgent** | No | Agent pre-selected via `SessionConfig.Agent` — `CustomAgentConfig.Tools` correctly restricts tool visibility. Fixed in `0.2.2-preview.0`. |
 | **AgentToolScopingSubagent** | No | Restricted agent delegates to unrestricted agent via the `task` tool — validates that subagent delegation correctly switches tool scope. |
-| **McpToolDiscovery** | Yes | Attaches an MCP server (HTTP) to a session and checks that its tools become visible to the model. |
-| **McpToolSpecified** | Yes | Same as McpToolDiscovery but also sets `SessionConfig.AvailableTools = ["github-mcp-server"]` to explicitly request the MCP server's tools. |
-| **McpToolAgentScoped** | Yes | Agent with `Tools = ["github-mcp-server"]` selected via `Rpc.Agent.SelectAsync` — MCP tools should be exposed through the agent's tool scope. |
+| **McpToolDiscovery** | No | Attaches an MCP server to a session and checks that its tools become visible to the model. Fixed in `0.2.2-preview.0`. |
+| **McpToolExplicit** | No | MCP server with explicit tool names in `AvailableTools` — tools correctly exposed. Fixed in `0.2.2-preview.0`. |
+| **McpToolSpecified** | Yes | Same as McpToolDiscovery but sets `SessionConfig.AvailableTools = ["test-mcp"]` (server name) — MCP tools are NOT exposed. |
+| **McpToolAgentScoped** | Yes | Agent with `Tools = ["test-mcp"]` selected via `Rpc.Agent.SelectAsync` — MCP tools should be exposed through the agent's tool scope. |
+| **McpToolAgentScopedExplicit** | Yes | Agent with explicit MCP tool names selected via `Rpc.Agent.SelectAsync` — MCP tools not exposed. |
+| **McpToolAgentScopedExplicitSession** | Yes | Agent with explicit MCP tool names + session `AvailableTools` — MCP tools not exposed, wrong tools visible. |
+
+## Tracked Issues
+
+| Issue | Description | Tests |
+|-------|-------------|-------|
+| [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861) | Agent tool scoping (`CustomAgentConfig.Tools`) not enforced | AgentToolScopingSessionAgent, AgentToolScopingPostSelect |
+| [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) | MCP server tools not discoverable by the model | McpToolDiscovery, McpToolSpecified |
+| [github/copilot-sdk#859](https://github.com/github/copilot-sdk/issues/859) | MCP tools not exposed through agent tool scope | McpToolAgentScoped |
+
+> **2026-04-09:** Tested with SDK `0.2.2-preview.0` / CLI `1.0.20-1`:
+> - **#861** — Fully resolved. Agent tool scoping works for both `SessionConfig.Agent` and `Rpc.Agent.SelectAsync`.
+> - **#860** — Partially fixed. Basic MCP tool discovery works, but `AvailableTools` with server name doesn't surface MCP tools.
+> - **#859** — Still reproduces. MCP tools not exposed through agent tool scope.
+>
+> **2026-04-01:** All three issues still reproduce with SDK `0.2.1-preview.1` / CLI `1.0.12-0`.
 
 ## How It Works
 

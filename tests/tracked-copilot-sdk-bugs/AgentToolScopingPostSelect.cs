@@ -48,7 +48,7 @@ public class AgentToolScopingPostSelect : IBugRepro
         // Do NOT pre-select — leave SessionConfig.Agent unset
         var sessionConfig = new SessionConfig
         {
-            Model = "gpt5-mini",
+            Model = "claude-haiku-4.5",
             CustomAgents = new List<CustomAgentConfig> { restricted, unrestricted },
             // Agent is NOT set here
             OnPermissionRequest = PermissionHandler.ApproveAll,

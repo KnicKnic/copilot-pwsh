@@ -47,7 +47,7 @@ public class McpToolAgentScopedExplicitSession : IBugRepro
 
         var sessionConfig = new SessionConfig
         {
-            Model = "gpt5-mini",
+            Model = "claude-haiku-4.5",
             McpServers = new Dictionary<string, object>
             {
                 [TestMcpServerHelper.McpServerName] = mcpServer

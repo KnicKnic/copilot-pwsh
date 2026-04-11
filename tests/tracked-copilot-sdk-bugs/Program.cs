@@ -20,6 +20,7 @@ using System.Formats.Tar;
 using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 
 // --- Resolve SDK and CLI versions ---
 var sdkAssembly = typeof(CopilotClient).Assembly;
@@ -94,9 +95,14 @@ if (!File.Exists(cliPath))
     return 2;
 }
 
-// Verify with --version
+// Verify the actual binary version (Windows file metadata first, then CLI banner fallback)
 var verifiedVersion = GetCliVersion(cliPath);
+var reportedVersion = GetCliReportedVersion(cliPath);
 Console.WriteLine($"CLI version verified: {verifiedVersion}");
+if (!string.IsNullOrWhiteSpace(reportedVersion) && !string.Equals(reportedVersion, verifiedVersion, StringComparison.OrdinalIgnoreCase))
+{
+    Console.WriteLine($"CLI --version says:   {reportedVersion} (banner output differs from file metadata)");
+}
 Console.WriteLine($"CLI path:             {cliPath}");
 Console.WriteLine();
 
@@ -202,6 +208,27 @@ return failures > 0 ? 1 : 0;
 
 static string? GetCliVersion(string path)
 {
+    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+    {
+        try
+        {
+            var info = FileVersionInfo.GetVersionInfo(path);
+            if (!string.IsNullOrWhiteSpace(info.ProductVersion))
+                return info.ProductVersion;
+            if (!string.IsNullOrWhiteSpace(info.FileVersion))
+                return info.FileVersion;
+        }
+        catch
+        {
+            // Fall back to the CLI banner below.
+        }
+    }
+
+    return GetCliReportedVersion(path);
+}
+
+static string? GetCliReportedVersion(string path)
+{
     try
     {
         var psi = new ProcessStartInfo(path, "--version")
@@ -212,11 +239,23 @@ static string? GetCliVersion(string path)
             CreateNoWindow = true
         };
         using var proc = Process.Start(psi);
-        var output = proc?.StandardOutput.ReadToEnd().Trim();
+        var stdout = proc?.StandardOutput.ReadToEnd();
+        var stderr = proc?.StandardError.ReadToEnd();
         proc?.WaitForExit(5000);
-        return output;
+
+        var combined = string.Join(Environment.NewLine,
+            new[] { stdout, stderr }.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s!.Trim()));
+
+        if (string.IsNullOrWhiteSpace(combined))
+            return null;
+
+        var match = Regex.Match(combined, @"\b\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?\b");
+        return match.Success ? match.Value.TrimEnd('.') : combined;
     }
-    catch { return null; }
+    catch
+    {
+        return null;
+    }
 }
 
 static async Task<bool> DownloadCliAsync(string version, string targetPath)

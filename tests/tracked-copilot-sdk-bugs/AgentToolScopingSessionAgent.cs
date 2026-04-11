@@ -15,7 +15,7 @@ using GitHub.Copilot.SDK;
 
 public class AgentToolScopingSessionAgent : IBugRepro
 {
-    public bool ExpectsFail => true;
+    public bool ExpectsFail => false;
     public string Description =>
         "SessionConfig.Agent preselect: agent Tools not enforced, model sees all session tools";
 
@@ -47,7 +47,7 @@ public class AgentToolScopingSessionAgent : IBugRepro
         // Pre-select via SessionConfig.Agent — no post-creation SelectAsync
         var sessionConfig = new SessionConfig
         {
-            Model = "gpt5-mini",
+            Model = "claude-haiku-4.5",
             CustomAgents = new List<CustomAgentConfig> { restricted, unrestricted },
             Agent = "restricted",
             OnPermissionRequest = PermissionHandler.ApproveAll,

@@ -1,0 +1,4 @@
+.playwright-mcp
+test-results.txt
+copilot.exe.*
+*.mjs

@@ -53,7 +53,7 @@ public class AgentToolScopingSubagent : IBugRepro
 
         var sessionConfig = new SessionConfig
         {
-            Model = "gpt5-mini",
+            Model = "claude-haiku-4.5",
             CustomAgents = new List<CustomAgentConfig> { restricted, unrestricted },
             OnPermissionRequest = PermissionHandler.ApproveAll,
         };
