@@ -37,8 +37,6 @@ public sealed class NewCopilotClientCommand : AsyncPSCmdlet
     [Parameter(HelpMessage = "Auto-start the server on creation.")]
     public bool AutoStart { get; set; } = true;
 
-    [Parameter(HelpMessage = "Auto-restart on crash.")]
-    public bool AutoRestart { get; set; } = true;
 
     [Parameter(HelpMessage = "Working directory for the CLI process.")]
     public string? Cwd { get; set; }
@@ -68,7 +66,6 @@ public sealed class NewCopilotClientCommand : AsyncPSCmdlet
         if (UseStdio.IsPresent) opts.UseStdio = true;
         if (LogLevel is not null) opts.LogLevel = LogLevel;
         opts.AutoStart = AutoStart;
-        opts.AutoRestart = AutoRestart;
         if (Cwd is not null) opts.Cwd = Cwd;
         if (GitHubToken is not null) opts.GitHubToken = GitHubToken;
         if (UseLoggedInUser.IsPresent) opts.UseLoggedInUser = true;

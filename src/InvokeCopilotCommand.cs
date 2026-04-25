@@ -196,7 +196,7 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
         }
 
         // Load MCP config
-        Dictionary<string, object>? mcpConfig = null;
+        Dictionary<string, McpServerConfig>? mcpConfig = null;
 
         // Determine effective tool filter for MCP server scoping.
         // If -AvailableTools is explicit, use that (+ agent refs).
@@ -319,10 +319,10 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
 
         if (Attachment is not null)
         {
-            var attachments = new List<UserMessageDataAttachmentsItem>();
+            var attachments = new List<UserMessageAttachment>();
             foreach (var path in Attachment)
             {
-                attachments.Add(new UserMessageDataAttachmentsItemFile
+                attachments.Add(new UserMessageAttachmentFile
                 {
                     Path = path,
                     DisplayName = System.IO.Path.GetFileName(path)

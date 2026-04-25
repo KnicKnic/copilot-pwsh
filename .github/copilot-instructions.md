@@ -20,7 +20,7 @@ PowerShell 7+ binary module (C#) wrapping the GitHub Copilot SDK for .NET. Targe
 - **InvokeCopilotCommand.cs** — One-shot convenience cmdlet. Manages full client+session lifecycle.
 - **LoginCmdlet.cs** — `Connect-Copilot`. Resolves/downloads the correct CLI version and runs `copilot login` interactively for OAuth device flow authentication. Supports `-GitHubHost` for GHE.
 - **CliPathResolver.cs** — Resolves `runtimes/<rid>/native/copilot[.exe]` relative to the assembly location.
-- **McpConfigLoader.cs** — Parses MCP JSON config files into SDK `McpLocalServerConfig`/`McpRemoteServerConfig` objects. Defaults `Tools=["*"]`, `Type="stdio"`. Skips `"disabled": true` entries.
+- **McpConfigLoader.cs** — Parses MCP JSON config files into SDK `McpStdioServerConfig`/`McpHttpServerConfig` objects. Defaults `Tools=["*"]`. Skips `"disabled": true` entries.
 - **ToolFilterHelper.cs** — Manages tool filtering with dynamic MCP tool discovery. When `-AvailableTools` is specified, core CLI tools are always included. Wildcard patterns (`ado-*`) and bare server names (`ado`) are expanded against dynamically discovered MCP tools via `McpToolDiscovery`. MCP servers not referenced in `-AvailableTools` are excluded from the session.
 - **McpToolDiscovery.cs** — Discovers MCP server tools at runtime via the `tools/list` JSON-RPC protocol over stdio. Starts the server process, performs the MCP handshake, collects tool names, and kills the process.
 - **McpWrapperHelper.cs** — Wraps ALL local MCP server configs to use `mcp-wrapper`. The wrapper internally decides zombie vs direct mode via regex matching. Applied by default; disabled with `-NoMcpWrapper`.

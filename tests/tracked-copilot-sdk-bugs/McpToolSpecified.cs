@@ -37,7 +37,7 @@ public class McpToolSpecified : IBugRepro
         var sessionConfig = new SessionConfig
         {
             Model = "claude-haiku-4.5",
-            McpServers = new Dictionary<string, object>
+            McpServers = new Dictionary<string, McpServerConfig>
             {
                 [TestMcpServerHelper.McpServerName] = mcpServer
             },

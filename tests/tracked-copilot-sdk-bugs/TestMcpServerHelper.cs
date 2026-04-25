@@ -48,15 +48,14 @@ internal static class TestMcpServerHelper
     }
 
     /// <summary>
-    /// Creates a McpLocalServerConfig pointing at the test MCP server.
+    /// Creates a McpStdioServerConfig pointing at the test MCP server.
     /// </summary>
-    public static McpLocalServerConfig CreateMcpConfig(string testServerProject)
+    public static McpStdioServerConfig CreateMcpConfig(string testServerProject)
     {
-        return new McpLocalServerConfig
+        return new McpStdioServerConfig
         {
             Command = "dotnet",
             Args = new List<string> { "run", "--project", testServerProject, "-c", "Release" },
-            Type = "stdio",
             Tools = new List<string> { "*" }
         };
     }

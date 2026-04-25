@@ -9,7 +9,7 @@ namespace CopilotShell;
 /// persistent "zombie" daemon connections that survive session boundaries.
 /// </summary>
 /// <remarks>
-/// <para>When wrapping is enabled (default), each <see cref="McpLocalServerConfig"/> is
+/// <para>When wrapping is enabled (default), each <see cref="McpStdioServerConfig"/> is
 /// transformed so that <c>mcp-wrapper</c> becomes the command, and the original command,
 /// args, env vars, and cwd are passed as wrapper arguments:</para>
 /// <code>
@@ -46,15 +46,15 @@ internal static class McpWrapperHelper
     /// <param name="mcpConfig">The MCP server config dictionary (from <see cref="McpConfigLoader"/>)</param>
     /// <param name="wrapperPath">Full path to the mcp-wrapper executable</param>
     /// <returns>A new dictionary with wrapped local server configs</returns>
-    public static Dictionary<string, object> WrapLocalServers(
-        Dictionary<string, object> mcpConfig,
+    public static Dictionary<string, McpServerConfig> WrapLocalServers(
+        Dictionary<string, McpServerConfig> mcpConfig,
         string wrapperPath)
     {
-        var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, McpServerConfig>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var (name, config) in mcpConfig)
         {
-            if (config is McpLocalServerConfig localConfig && NeedsWrapping(localConfig, wrapperPath))
+            if (config is McpStdioServerConfig localConfig && NeedsWrapping(localConfig, wrapperPath))
             {
                 result[name] = WrapConfig(localConfig, wrapperPath);
             }
@@ -72,13 +72,13 @@ internal static class McpWrapperHelper
     /// All local servers are wrapped so zombie-eligible ones get persistent daemon
     /// connections.
     /// </summary>
-    private static bool NeedsWrapping(McpLocalServerConfig config, string wrapperPath) => true;
+    private static bool NeedsWrapping(McpStdioServerConfig config, string wrapperPath) => true;
 
     /// <summary>
-    /// Transform a single <see cref="McpLocalServerConfig"/> to use the wrapper.
+    /// Transform a single <see cref="McpStdioServerConfig"/> to use the wrapper.
     /// The original command, args, env, and cwd become wrapper arguments.
     /// </summary>
-    internal static McpLocalServerConfig WrapConfig(McpLocalServerConfig original, string wrapperPath)
+    internal static McpStdioServerConfig WrapConfig(McpStdioServerConfig original, string wrapperPath)
     {
         var wrappedArgs = new List<string>();
 
@@ -113,14 +113,13 @@ internal static class McpWrapperHelper
                 wrappedArgs.Add(arg);
         }
 
-        return new McpLocalServerConfig
+        return new McpStdioServerConfig
         {
             Command = wrapperPath,
             Args = wrappedArgs,
             Env = original.Env,   // SDK also sets these as process env vars (harmless duplication)
             Cwd = original.Cwd,   // SDK also sets cwd on wrapper process
             Tools = original.Tools,
-            Type = original.Type,
             Timeout = original.Timeout
         };
     }

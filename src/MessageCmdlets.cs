@@ -148,10 +148,10 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
 
         if (Attachment is not null)
         {
-            var attachments = new List<UserMessageDataAttachmentsItem>();
+            var attachments = new List<UserMessageAttachment>();
             foreach (var path in Attachment)
             {
-                attachments.Add(new UserMessageDataAttachmentsItemFile
+                attachments.Add(new UserMessageAttachmentFile
                 {
                     Path = path,
                     DisplayName = System.IO.Path.GetFileName(path)

@@ -116,7 +116,7 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
         }
 
         // Load MCP config
-        Dictionary<string, object>? mcpConfig = null;
+        Dictionary<string, McpServerConfig>? mcpConfig = null;
 
         // Determine effective tool filter for MCP server scoping.
         // If -AvailableTools is explicit, use that (+ agent refs).

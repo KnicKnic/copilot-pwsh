@@ -142,7 +142,7 @@ internal static class ToolFilterHelper
     /// </summary>
     public static List<string> GetServersNeedingDiscovery(
         string[]? toolPatterns,
-        Dictionary<string, object>? mcpConfig)
+        Dictionary<string, McpServerConfig>? mcpConfig)
     {
         var result = new List<string>();
         if (toolPatterns == null || mcpConfig == null)
@@ -307,8 +307,8 @@ internal static class ToolFilterHelper
     /// Matches bare names ("ado"), wildcards ("ado-*"), and exact tool names ("ev2-get_rollout_details").
     /// If <c>userTools</c> is null/empty, returns the full config (no filtering).
     /// </summary>
-    public static Dictionary<string, object>? FilterMcpServers(
-        Dictionary<string, object>? mcpConfig,
+    public static Dictionary<string, McpServerConfig>? FilterMcpServers(
+        Dictionary<string, McpServerConfig>? mcpConfig,
         string[]? userTools)
     {
         if (mcpConfig == null) return null;
@@ -344,9 +344,9 @@ internal static class ToolFilterHelper
         }
 
         if (referencedServers.Count == 0)
-            return new Dictionary<string, object>();
+            return new Dictionary<string, McpServerConfig>();
 
-        var filtered = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        var filtered = new Dictionary<string, McpServerConfig>(StringComparer.OrdinalIgnoreCase);
         foreach (var server in referencedServers)
         {
             if (mcpConfig.TryGetValue(server, out var config))

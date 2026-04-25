@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using GitHub.Copilot.SDK;
 
 namespace CopilotShell;
 
@@ -149,7 +150,7 @@ internal static class McpToolDiscovery
     /// Servers that fail or time out will have empty lists.
     /// </returns>
     public static async Task<Dictionary<string, List<string>>> DiscoverToolsForServersAsync(
-        Dictionary<string, object> mcpServers,
+        Dictionary<string, McpServerConfig> mcpServers,
         IEnumerable<string> serverNames,
         int timeoutMs = 30000,
         CancellationToken ct = default)
@@ -162,7 +163,7 @@ internal static class McpToolDiscovery
             if (!mcpServers.TryGetValue(name, out var config))
                 continue;
 
-            if (config is not GitHub.Copilot.SDK.McpLocalServerConfig localConfig)
+            if (config is not GitHub.Copilot.SDK.McpStdioServerConfig localConfig)
             {
                 errors[name] = "Remote servers are not supported for tool discovery";
                 result[name] = new List<string>();

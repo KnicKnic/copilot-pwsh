@@ -6,8 +6,8 @@ namespace CopilotShell;
 
 /// <summary>
 /// Loads MCP server configurations from a JSON config file (e.g. mcp-config.json)
-/// and converts them into the SDK's <see cref="McpLocalServerConfig"/> /
-/// <see cref="McpRemoteServerConfig"/> objects for <see cref="SessionConfig.McpServers"/>.
+/// and converts them into the SDK's <see cref="McpStdioServerConfig"/> /
+/// <see cref="McpHttpServerConfig"/> objects for <see cref="SessionConfig.McpServers"/>.
 /// </summary>
 internal static class McpConfigLoader
 {
@@ -37,7 +37,7 @@ internal static class McpConfigLoader
     /// <c>"command"</c> are local. Entries with <c>"disabled": true</c> are skipped.
     /// When <c>"tools"</c> is absent, it defaults to <c>["*"]</c>.
     /// </remarks>
-    public static Dictionary<string, object> Load(string filePath)
+    public static Dictionary<string, McpServerConfig> Load(string filePath)
     {
         if (!File.Exists(filePath))
             throw new FileNotFoundException($"MCP config file not found: {filePath}", filePath);
@@ -67,7 +67,7 @@ internal static class McpConfigLoader
                 $"MCP config file does not contain a 'mcpServers' or 'servers' property: {filePath}");
         }
 
-        var result = new Dictionary<string, object>();
+        var result = new Dictionary<string, McpServerConfig>();
 
         foreach (var serverProp in serversElement.EnumerateObject())
         {
@@ -94,12 +94,11 @@ internal static class McpConfigLoader
         return result;
     }
 
-    private static McpLocalServerConfig ParseLocalServer(JsonElement entry)
+    private static McpStdioServerConfig ParseLocalServer(JsonElement entry)
     {
-        var config = new McpLocalServerConfig
+        var config = new McpStdioServerConfig
         {
             Tools = new List<string> { "*" },
-            Type = "stdio"
         };
 
         if (entry.TryGetProperty("command", out var cmd))
@@ -122,21 +121,17 @@ internal static class McpConfigLoader
         if (entry.TryGetProperty("tools", out var tools))
             config.Tools = tools.EnumerateArray().Select(t => t.GetString()!).ToList();
 
-        if (entry.TryGetProperty("type", out var type))
-            config.Type = type.GetString();
-
         if (entry.TryGetProperty("timeout", out var timeout))
             config.Timeout = timeout.GetInt32();
 
         return config;
     }
 
-    private static McpRemoteServerConfig ParseRemoteServer(JsonElement entry)
+    private static McpHttpServerConfig ParseRemoteServer(JsonElement entry)
     {
-        var config = new McpRemoteServerConfig
+        var config = new McpHttpServerConfig
         {
             Tools = new List<string> { "*" },
-            Type = "stdio"
         };
 
         if (entry.TryGetProperty("url", out var url))
@@ -148,9 +143,6 @@ internal static class McpConfigLoader
 
         if (entry.TryGetProperty("tools", out var tools))
             config.Tools = tools.EnumerateArray().Select(t => t.GetString()!).ToList();
-
-        if (entry.TryGetProperty("type", out var type))
-            config.Type = type.GetString() ?? string.Empty;
 
         if (entry.TryGetProperty("timeout", out var timeout))
             config.Timeout = timeout.GetInt32();
