@@ -44,6 +44,9 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
     [Parameter(HelpMessage = "Timeout in seconds. 0 = no timeout.")]
     public int TimeoutSeconds { get; set; } = 0;
 
+    [Parameter(HelpMessage = "Maximum number of assistant turns (tool-call round-trips). 0 = unlimited.")]
+    public int MaxTurns { get; set; } = 0;
+
     [Parameter(HelpMessage = "Name of a custom agent to select before sending the message. Pass $null or empty string to deselect the current agent.")]
     public string? Agent { get; set; }
 
@@ -161,6 +164,7 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
         {
             // For streaming, use manual subscription
             var done = new TaskCompletionSource();
+            int turnCount = 0;
             
             // Capture the SynchronizationContext to marshal WriteObject calls back to the pipeline thread
             var syncContext = SynchronizationContext.Current;
@@ -188,7 +192,11 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
 
                 if (evt is AssistantMessageEvent msg)
                 {
-                    // Not using lastAssistantContent in streaming mode
+                    turnCount++;
+                    if (MaxTurns > 0 && turnCount >= MaxTurns)
+                    {
+                        _ = Session.AbortAsync(cancellationToken);
+                    }
                 }
                 else if (evt is SessionIdleEvent)
                 {
@@ -234,22 +242,92 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
         else
         {
             // For non-streaming, use SendAndWaitAsync which handles lifecycle better
-            var timeout = TimeoutSeconds > 0 ? TimeSpan.FromSeconds(TimeoutSeconds) : (TimeSpan?)null;
-            
-            try
+            if (MaxTurns > 0)
             {
-                var result = await Session.SendAndWaitAsync(msgOpts, timeout, cancellationToken);
-                
-                if (result?.Data?.Content is not null)
+                // With MaxTurns, we need event-based tracking instead of SendAndWaitAsync
+                var done = new TaskCompletionSource();
+                int turnCount = 0;
+                string? lastAssistantContent = null;
+
+                using var registration = cancellationToken.Register(() =>
                 {
-                    WriteObject(result.Data.Content);
+                    done.TrySetCanceled(cancellationToken);
+                });
+
+                using var sub = Session.On(evt =>
+                {
+                    switch (evt)
+                    {
+                        case AssistantMessageEvent msg:
+                            lastAssistantContent = msg.Data.Content;
+                            turnCount++;
+                            if (MaxTurns > 0 && turnCount >= MaxTurns)
+                            {
+                                _ = Session.AbortAsync(cancellationToken);
+                            }
+                            break;
+                        case SessionIdleEvent:
+                            done.TrySetResult();
+                            break;
+                        case SessionErrorEvent err:
+                            done.TrySetException(new Exception(err.Data.Message));
+                            break;
+                    }
+                });
+
+                try
+                {
+                    await Session.SendAsync(msgOpts, cancellationToken);
+
+                    if (TimeoutSeconds > 0)
+                    {
+                        var completed = await Task.WhenAny(
+                            done.Task,
+                            Task.Delay(TimeSpan.FromSeconds(TimeoutSeconds), cancellationToken));
+                        if (completed != done.Task)
+                        {
+                            await Session.AbortAsync(cancellationToken);
+                            WriteWarning($"Timed out after {TimeoutSeconds}s — session aborted.");
+                        }
+                        else
+                        {
+                            await done.Task;
+                        }
+                    }
+                    else
+                    {
+                        await done.Task;
+                    }
+
+                    if (lastAssistantContent is not null)
+                    {
+                        WriteObject(lastAssistantContent);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    try { await Session.AbortAsync(CancellationToken.None); } catch { }
+                    throw;
                 }
             }
-            catch (OperationCanceledException)
+            else
             {
-                // Operation was cancelled
-                try { await Session.AbortAsync(CancellationToken.None); } catch { }
-                throw;
+                var timeout = TimeoutSeconds > 0 ? TimeSpan.FromSeconds(TimeoutSeconds) : (TimeSpan?)null;
+
+                try
+                {
+                    var result = await Session.SendAndWaitAsync(msgOpts, timeout, cancellationToken);
+
+                    if (result?.Data?.Content is not null)
+                    {
+                        WriteObject(result.Data.Content);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    try { await Session.AbortAsync(CancellationToken.None); } catch { }
+                    throw;
+                }
             }
         }
     }
