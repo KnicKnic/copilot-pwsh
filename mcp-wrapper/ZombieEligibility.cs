@@ -26,7 +26,6 @@ internal static class ZombieEligibility
         new(@".*microsoft-fabric-rti-mcp.*", RegexOptions.IgnoreCase | RegexOptions.Compiled),
         new(@".*ev2.*",                      RegexOptions.IgnoreCase | RegexOptions.Compiled),
         new(@".*grafana.*",                  RegexOptions.IgnoreCase | RegexOptions.Compiled),
-        new(@".*@microsoft/workiq.*",        RegexOptions.IgnoreCase | RegexOptions.Compiled),
     ];
 
     /// <summary>
