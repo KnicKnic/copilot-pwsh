@@ -25,6 +25,9 @@ param(
     [string]$Version = "0",
 
     [Parameter(Mandatory=$false)]
+    [int]$MaxTurns = 0,
+
+    [Parameter(Mandatory=$false)]
     [string]$McpConfigSource = ".vscode/mcp.json",
 
     [Parameter(Mandatory=$false)]
@@ -345,14 +348,13 @@ try{
     $client = New-CopilotClient -cwd $((Get-Location).Path)
     try{
         $customAgentsArg = if ($resolvedAgentFiles.Count -gt 0) { @{"-CustomAgentFile" = $resolvedAgentFiles} } else { @{} }
-        $agentName = if ($agentArgs.Count -gt 1) { $agentArgs[1] } else { $null }
-        $agentSelectArg = if ($agentName) { @{"-Agent" = $agentName} } else { @{} }
+        $agentArg = if ($agentArgs.Count -gt 1) { @{"-Agent" = $agentArgs[1]} } else { @{} }
         try {
             $session = New-CopilotSession $client `
                 -SystemMessage $SystemMessage `
                 -SystemMessageMode Replace `
                 -McpConfigFile $mcpConfigDest `
-                -InfiniteSessions -Model $Model -stream @customAgentsArg @agentSelectArg
+                -InfiniteSessions -Model $Model -stream @customAgentsArg @agentArg
         } catch {
             throw "New-CopilotSession failed: $_"
         }
@@ -366,7 +368,7 @@ try{
         
         try{
     try {
-        Send-CopilotMessage $session -prompt $prompt -timeout $(30*60) -stream | Format-CopilotEvent -LogFile "$runDetailsDir/pwsh_capture.md" | Out-Null
+        Send-CopilotMessage $session -MaxTurns $MaxTurns -prompt $prompt -timeout $(30*60) -stream | Format-CopilotEvent -LogFile "$runDetailsDir/pwsh_capture.md" | Out-Null
     } catch {
         throw "Send-CopilotMessage (main prompt) failed: $_"
     }
@@ -389,7 +391,7 @@ try{
                 } catch {
                     throw "Send-CopilotMessage (success check) failed: $_"
                 }
-                if($yesNo.trim() -ilike "yes"){
+                if($yesNo.trim() -ilike "yes*"){
                     $success = $true
                 } else {
                     $success = $false
@@ -399,6 +401,7 @@ try{
             else {
                 Write-Host "No prompt success indicator specified, skipping success check." -ForegroundColor Yellow
             }
+            # Send-CopilotMessage $session -prompt "what tools are available to you, can you say them?" -timeout $(30*60) -stream | Format-CopilotEvent
         }
         finally {
             Disconnect-CopilotSession $session | Out-Null
