@@ -84,6 +84,20 @@ internal static class ToolFilterHelper
         if (agents == null)
             return null;
 
+        // Check if any agent actually specifies a tools list.
+        // If none do, return null (meaning "all tools available").
+        bool anyAgentHasTools = false;
+        foreach (var agent in agents)
+        {
+            if (agent.Tools is { Count: > 0 })
+            {
+                anyAgentHasTools = true;
+                break;
+            }
+        }
+        if (!anyAgentHasTools)
+            return null;
+
         var tools = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // Always include these CLI tools when agents specify a tools list
