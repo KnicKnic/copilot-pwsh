@@ -171,8 +171,10 @@ internal static class McpToolDiscovery
 
             try
             {
-                // Route through mcp-wrapper if available — reuses zombie daemon
-                // for eligible servers instead of spawning a new process
+                // Route through mcp-wrapper for discovery. Zombie-eligible servers
+                // will be started via the daemon, pre-warming them for the real session.
+                // WrapConfig embeds env/cwd as --env/--cwd args, producing deterministic
+                // daemon child keys that match between discovery and session callers.
                 var wrapperPath = McpWrapperHelper.ResolveWrapperPath();
                 string effectiveCommand;
                 IList<string>? effectiveArgs;
@@ -184,8 +186,8 @@ internal static class McpToolDiscovery
                     var wrapped = McpWrapperHelper.WrapConfig(localConfig, wrapperPath);
                     effectiveCommand = wrapped.Command;
                     effectiveArgs = wrapped.Args;
-                    effectiveEnv = null;  // env is passed as --env args to wrapper
-                    effectiveCwd = null;  // cwd is passed as --cwd arg to wrapper
+                    effectiveEnv = wrapped.Env;   // also set on process for child inheritance in direct mode
+                    effectiveCwd = wrapped.Cwd;
                 }
                 else
                 {

@@ -82,6 +82,24 @@ internal static class McpWrapperHelper
     {
         var wrappedArgs = new List<string>();
 
+        // Pass env vars as explicit --env args so the zombie daemon gets
+        // deterministic child keys (same key from discovery and session).
+        if (original.Env is { Count: > 0 })
+        {
+            foreach (var (key, value) in original.Env)
+            {
+                wrappedArgs.Add("--env");
+                wrappedArgs.Add($"{key}={value}");
+            }
+        }
+
+        // Pass cwd as explicit --cwd arg for the same reason.
+        if (!string.IsNullOrEmpty(original.Cwd))
+        {
+            wrappedArgs.Add("--cwd");
+            wrappedArgs.Add(original.Cwd);
+        }
+
         // Separator between wrapper options and child command
         wrappedArgs.Add("--");
 
@@ -99,8 +117,8 @@ internal static class McpWrapperHelper
         {
             Command = wrapperPath,
             Args = wrappedArgs,
-            Env = original.Env,   // SDK sets these as real env vars on the wrapper process, which the child inherits
-            Cwd = original.Cwd,   // SDK sets cwd on the wrapper process, which the child inherits
+            Env = original.Env,   // SDK also sets these as process env vars (harmless duplication)
+            Cwd = original.Cwd,   // SDK also sets cwd on wrapper process
             Tools = original.Tools,
             Type = original.Type,
             Timeout = original.Timeout
