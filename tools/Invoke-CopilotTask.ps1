@@ -77,6 +77,21 @@ param(
 )
 #endregion
 
+#region Ensure CopilotShell module is loaded
+# Ensure the module is loaded so the assembly resolver from StartupCheck.ps1
+# is active. Without this, auto-import may not run ScriptsToProcess reliably.
+if (-not (Get-Module CopilotShell)) {
+    Import-Module CopilotShell -ErrorAction Stop
+}
+#endregion
+
+#region Sync process directory with PowerShell working directory
+if ([System.IO.Directory]::GetCurrentDirectory() -ne (Get-Location).Path) {
+    Write-Host "Warning: .NET process directory '$([System.IO.Directory]::GetCurrentDirectory())' differs from PowerShell directory '$((Get-Location).Path)'. Syncing." -ForegroundColor Yellow
+    [System.IO.Directory]::SetCurrentDirectory((Get-Location).Path)
+}
+#endregion
+
 #region MCP Config Generation
 $workspaceRoot = (Get-Location).Path
 $resolvedMcpConfigSource = if ([System.IO.Path]::IsPathRooted($McpConfigSource)) { $McpConfigSource } else { Join-Path $workspaceRoot $McpConfigSource }
@@ -348,7 +363,7 @@ try{
     $client = New-CopilotClient -cwd $((Get-Location).Path)
     try{
         $customAgentsArg = if ($resolvedAgentFiles.Count -gt 0) { @{"-CustomAgentFile" = $resolvedAgentFiles} } else { @{} }
-        $agentArg = if ($agentArgs.Count -gt 1) { @{"-Agent" = $agentArgs[1]} } else { @{} }
+    $agentArg = if ($agentArgs.Count -gt 1) { @{"-Agent" = $agentArgs[1]} } else { @{} }
         try {
             $session = New-CopilotSession $client `
                 -SystemMessage $SystemMessage `

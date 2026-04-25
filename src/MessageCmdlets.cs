@@ -44,6 +44,9 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
     [Parameter(HelpMessage = "Timeout in seconds. 0 = no timeout.")]
     public int TimeoutSeconds { get; set; } = 0;
 
+    [Parameter(HelpMessage = "Timeout in seconds for the first event to arrive after sending. If no events arrive within this time, the session is aborted and an error is thrown. 0 = no initial timeout. Default: 120.")]
+    public int InitialTimeoutSeconds { get; set; } = 120;
+
     [Parameter(HelpMessage = "Maximum number of assistant turns (tool-call round-trips). 0 = unlimited.")]
     public int MaxTurns { get; set; } = 0;
 
@@ -165,6 +168,7 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
             // For streaming, use manual subscription
             var done = new TaskCompletionSource();
             int turnCount = 0;
+            bool receivedFirstEvent = false;
             
             // Capture the SynchronizationContext to marshal WriteObject calls back to the pipeline thread
             var syncContext = SynchronizationContext.Current;
@@ -180,6 +184,8 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
             
             sub = Session.On(evt =>
             {
+                receivedFirstEvent = true;
+
                 // Marshal WriteObject back to the pipeline thread
                 if (syncContext is not null)
                 {
@@ -211,6 +217,21 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
             try
             {
                 await Session.SendAsync(msgOpts, cancellationToken);
+
+                // Check for initial event timeout — if nothing arrives quickly, the CLI may be hung
+                if (InitialTimeoutSeconds > 0 && !receivedFirstEvent)
+                {
+                    var initialDelay = Task.Delay(TimeSpan.FromSeconds(InitialTimeoutSeconds), cancellationToken);
+                    var winner = await Task.WhenAny(done.Task, initialDelay);
+                    if (winner == initialDelay && !receivedFirstEvent)
+                    {
+                        await Session.AbortAsync(CancellationToken.None);
+                        throw new TimeoutException(
+                            $"No events received within {InitialTimeoutSeconds}s after sending message. " +
+                            "The Copilot CLI may be hanging during MCP tool initialization. " +
+                            "Use -InitialTimeoutSeconds 0 to disable this check.");
+                    }
+                }
                 
                 if (TimeoutSeconds > 0)
                 {

@@ -74,7 +74,10 @@ public sealed class NewCopilotClientCommand : AsyncPSCmdlet
 
         if (AutoStart)
         {
-            await client.StartAsync();
+            // Run StartAsync without our PipelineSyncContext so the SDK's internal
+            // reader threads don't capture it (it will be disposed after this cmdlet returns).
+            // Use Task.Run to ensure StartAsync runs on the thread pool with no SyncContext.
+            await Task.Run(() => client.StartAsync());
         }
 
         WriteObject(client);

@@ -71,22 +71,25 @@ public sealed class ConnectCopilotCommand : AsyncPSCmdlet
             return;
         }
 
-        // Stream stdout and stderr to the host in real time
-        var stdoutTask = Task.Run(async () =>
+        // Stream stdout and stderr to the host in real time.
+        // Do NOT use Task.Run — that escapes the AsyncPSCmdlet SynchronizationContext,
+        // causing WriteObject/WriteWarning to be called from thread pool threads
+        // where they silently fail. Starting the async methods directly ensures
+        // continuations are posted back to the pipeline thread.
+        async Task ReadStdout()
         {
             while (await process.StandardOutput.ReadLineAsync() is { } line)
-            {
                 WriteObject(line);
-            }
-        });
+        }
 
-        var stderrTask = Task.Run(async () =>
+        async Task ReadStderr()
         {
             while (await process.StandardError.ReadLineAsync() is { } line)
-            {
                 WriteWarning(line);
-            }
-        });
+        }
+
+        var stdoutTask = ReadStdout();
+        var stderrTask = ReadStderr();
 
         await process.WaitForExitAsync();
         await Task.WhenAll(stdoutTask, stderrTask);

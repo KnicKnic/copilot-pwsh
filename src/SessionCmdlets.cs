@@ -76,6 +76,9 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
     [Alias("AgentFile")]
     public string[]? CustomAgentFile { get; set; }
 
+    [Parameter(HelpMessage = "Timeout in seconds for session creation (default: 120). Set to 0 for no timeout.")]
+    public int Timeout { get; set; } = 120;
+
     protected override async Task ProcessRecordAsync()
     {
         var config = new SessionConfig();
@@ -131,7 +134,9 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
 
         if (McpConfigFile is not null)
         {
+            WriteVerbose($"Loading MCP config from: {McpConfigFile}");
             mcpConfig = McpConfigLoader.Load(ResolvePSPath(McpConfigFile));
+            WriteVerbose($"Loaded {mcpConfig.Count} MCP server(s): {string.Join(", ", mcpConfig.Keys)}");
 
             var filtered = ToolFilterHelper.FilterMcpServers(mcpConfig, effectiveToolFilter);
 
@@ -151,6 +156,8 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
             }
 
             config.McpServers = filtered;
+            if (filtered is not null)
+                WriteVerbose($"MCP servers attached to session: {string.Join(", ", filtered.Keys)}");
         }
 
         // Pass AvailableTools to session — either explicit or derived from agent tool refs.
@@ -211,6 +218,7 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
 
         // Auto-approve tool permission requests using the SDK's built-in handler
         config.OnPermissionRequest = PermissionHandler.ApproveAll;
+        WriteVerbose("Config built, permission handler set.");
 
         // Pre-select agent at session creation (SDK 0.1.33+)
         // If a single custom agent was loaded and -Agent was not specified, auto-select it
@@ -236,7 +244,35 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
             }
         }
 
-        var session = await Client.CreateSessionAsync(config);
+        WriteVerbose("Calling CreateSessionAsync...");
+        // Run CreateSessionAsync without our PipelineSyncContext so the SDK's internal
+        // JSON-RPC reader threads don't capture it. If they capture our pump's context
+        // (which is tied to this cmdlet's BlockingCollection), all session events will be
+        // silently swallowed after this cmdlet returns because the queue is disposed.
+        // Task.Run ensures the SDK runs on a clean ThreadPool thread with no SyncContext,
+        // so events are dispatched on ThreadPool threads where Send-CopilotMessage can
+        // receive them through its own SyncContext pump.
+        CopilotSession session;
+        if (Timeout > 0)
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Timeout));
+            try
+            {
+                session = await Task.Run(() => Client.CreateSessionAsync(config), cts.Token);
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+                throw new TimeoutException(
+                    $"New-CopilotSession timed out after {Timeout}s waiting for CreateSessionAsync. " +
+                    "The Copilot CLI may be hanging during MCP server initialization. " +
+                    "Use -Timeout 0 to disable, or -Verbose to see progress.");
+            }
+        }
+        else
+        {
+            session = await Task.Run(() => Client.CreateSessionAsync(config));
+        }
+        WriteVerbose($"Session created: {session.SessionId}");
 
         WriteObject(session);
     }
