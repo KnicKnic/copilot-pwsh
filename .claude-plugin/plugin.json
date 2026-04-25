@@ -1,0 +1,8 @@
+{
+  "name": "copilot-pwsh",
+  "description": "Autonomous Copilot task runner for PowerShell. Includes Invoke-CopilotTask for headless agent workflows, CI triage, and MCP tool orchestration.",
+  "version": "0.3.0",
+  "author": {
+    "name": "KnicKnic"
+  }
+}
