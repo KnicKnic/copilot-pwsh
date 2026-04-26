@@ -48,7 +48,6 @@ logs/
 
 .copilot_runs/
 ci-failures/
-tools/
 mcp-config.json
 mcp.json
 TODO.md

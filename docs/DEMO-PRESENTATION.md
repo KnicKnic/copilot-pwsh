@@ -427,7 +427,7 @@ An alert fired for service 'payments-api'.
 
 ## Demo 8: Task Runner with Verification — `Invoke-CopilotTask.ps1`
 
-The `tools/Invoke-CopilotTask.ps1` script wraps the full CopilotShell lifecycle into a
+The `skills/invoke-copilot-task/assets/Invoke-CopilotTask.ps1` script wraps the full CopilotShell lifecycle into a
 **self-contained task runner** with built-in success verification. It handles MCP config
 generation, agent file resolution, run tracking, and multi-turn verification — all in one call.
 
@@ -437,7 +437,7 @@ generation, agent file resolution, run tracking, and multi-turn verification —
 # Single command: generate a report, send a follow-up to ensure it's at the right path,
 # and ask a yes/no question to verify success — all tracked in .copilot_runs/
 # -RunOnce ensures it won't re-execute if a previous run already succeeded.
-.\tools\Invoke-CopilotTask.ps1 `
+.\skills\invoke-copilot-task\assets\Invoke-CopilotTask.ps1 `
     -PrependPrompt "Generate a detailed incident report for the payments-api outage on 2026-03-04. Include error rates, root cause analysis, affected services, and remediation steps. Write the report to ./reports/incident-2026-03-04.md" `
     -AdditionalPrompts @(
         "Ensure you wrote the full incident report to ./reports/incident-2026-03-04.md — if the file is missing or incomplete, create or complete it now."
@@ -494,14 +494,14 @@ Step 4: Run details saved to .copilot_runs/incident-report/2026-03-04/
 
 ```powershell
 # First run: executes the task
-.\tools\Invoke-CopilotTask.ps1 `
+.\skills\invoke-copilot-task\assets\Invoke-CopilotTask.ps1 `
     -PrependPrompt "Generate the weekly metrics report and write it to ./reports/weekly.md" `
     -AdditionalPrompts @("Make sure the report is saved to ./reports/weekly.md") `
     -promptSuccessYesNoQuestion "Did you write the report to ./reports/weekly.md? Yes or No." `
     -Name "weekly-report" -Version "2026-w10" -RunOnce
 
 # Second run: skips — already succeeded with same version
-.\tools\Invoke-CopilotTask.ps1 `
+.\skills\invoke-copilot-task\assets\Invoke-CopilotTask.ps1 `
     -PrependPrompt "Generate the weekly metrics report and write it to ./reports/weekly.md" `
     -AdditionalPrompts @("Make sure the report is saved to ./reports/weekly.md") `
     -promptSuccessYesNoQuestion "Did you write the report to ./reports/weekly.md? Yes or No." `
@@ -513,7 +513,7 @@ Step 4: Run details saved to .copilot_runs/incident-report/2026-03-04/
 
 ```powershell
 # Returns $true if the previous run succeeded with the given version
-$ok = .\tools\Invoke-CopilotTask.ps1 -Name "incident-report/2026-03-04" -Version "0" -Check
+$ok = .\skills\invoke-copilot-task\assets\Invoke-CopilotTask.ps1 -Name "incident-report/2026-03-04" -Version "0" -Check
 if (-not $ok) {
     Write-Error "Incident report task has not completed successfully"
     exit 1

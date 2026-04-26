@@ -8,7 +8,7 @@ Each Invoke-CopilotTask run creates a directory under `.copilot_runs/<Name>/` wi
 {
   "timestamp": "2026-04-24T10:30:00.0000000-07:00",
   "promptName": "ci-failure",
-  "promptFile": "tools/ci-failure.prompt.md",
+  "promptFile": "skills/invoke-copilot-task/assets/ci-failure.prompt.md",
   "agent": "code-review",
   "agentFiles": ["C:\\code\\my-repo\\.github\\agents\\code-review.agent.md"],
   "sessionId": "a1b2c3d4-...",
@@ -120,7 +120,7 @@ $runs | Where-Object { -not $_.success } | ForEach-Object {
 ```pwsh
 # Option 2: Re-invoke directly without -RunOnce
 $runs | Where-Object { -not $_.success } | ForEach-Object {
-    & tools/Invoke-CopilotTask.ps1 `
+    & skills/invoke-copilot-task/assets/Invoke-CopilotTask.ps1 `
         -PrependPrompt $_.promptName `
         -Name $_.name `
         -Model $_.model
@@ -134,7 +134,7 @@ $runs | Where-Object { -not $_.success } | ForEach-Object {
     $dir = ".copilot_runs/$($_.name)"
     if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
 
-    & tools/Invoke-CopilotTask.ps1 `
+    & skills/invoke-copilot-task/assets/Invoke-CopilotTask.ps1 `
         -PrependPrompt (Get-Content "$dir/../$($_.name)/prompt.txt" -Raw -ErrorAction SilentlyContinue) `
         -Name $_.name `
         -Model "claude-opus-4.6"
@@ -146,8 +146,8 @@ $runs | Where-Object { -not $_.success } | ForEach-Object {
 Instead of deleting, pass a new `-Version` so `-RunOnce` doesn't skip:
 
 ```pwsh
-& tools/Invoke-CopilotTask.ps1 `
-    -PromptFile tools/my-task.prompt.md `
+& skills/invoke-copilot-task/assets/Invoke-CopilotTask.ps1 `
+    -PromptFile skills/invoke-copilot-task/assets/my-task.prompt.md `
     -Name "my-task/item1" `
     -RunOnce -Version "2"   # was "1" before
 ```
@@ -156,11 +156,11 @@ Instead of deleting, pass a new `-Version` so `-RunOnce` doesn't skip:
 
 ```pwsh
 # Check if a run already succeeded (no execution)
-$done = & tools/Invoke-CopilotTask.ps1 -Name "setup" -Version "1" -Check
+$done = & skills/invoke-copilot-task/assets/Invoke-CopilotTask.ps1 -Name "setup" -Version "1" -Check
 
 if (-not $done) {
     Write-Host "Setup not complete, running..."
-    & tools/Invoke-CopilotTask.ps1 -PrependPrompt "Run setup" -Name "setup" -Version "1"
+    & skills/invoke-copilot-task/assets/Invoke-CopilotTask.ps1 -PrependPrompt "Run setup" -Name "setup" -Version "1"
 }
 ```
 
