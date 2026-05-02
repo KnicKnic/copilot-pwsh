@@ -1,4 +1,7 @@
 using System.Management.Automation;
+using System.Collections;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using GitHub.Copilot.SDK;
 
 namespace CopilotShell;
@@ -174,143 +177,26 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
             };
         }
 
-        // Parse agent files early (needed for MCP server filtering and tool discovery)
-        List<CustomAgentConfig>? allAgents = null;
-        if (CustomAgents is not null || CustomAgentFile is not null)
-        {
-            allAgents = new List<CustomAgentConfig>();
-            if (CustomAgents is not null)
-                allAgents.AddRange(CustomAgents);
-            if (CustomAgentFile is not null)
-            {
-                foreach (var file in CustomAgentFile)
-                {
-                    var resolvedPath = ResolvePSPath(file);
-                    var parsed = AgentFileParser.Parse(resolvedPath);
-                    allAgents.Add(parsed);
-                    WriteVerbose($"Loaded agent '{parsed.Name}' from {Path.GetFileName(resolvedPath)}");
-                }
-            }
-            sessionConfig.CustomAgents = allAgents;
-            WriteVerbose($"Registered {allAgents.Count} custom agent(s): {string.Join(", ", allAgents.Select(a => a.Name))}");
-        }
-
-        // Load MCP config
-        Dictionary<string, McpServerConfig>? mcpConfig = null;
-
-        // Determine effective tool filter for MCP server scoping.
-        // If -AvailableTools is explicit, use that (+ agent refs).
-        // If only agent tool refs exist (no explicit -AvailableTools), use agent refs
-        // to filter servers so only referenced MCP servers are attached.
-        var agentMcpRefs = ToolFilterHelper.GetMcpToolRefsFromAgents(allAgents);
-        string[]? effectiveToolFilter = AvailableTools;
-        if (AvailableTools != null && agentMcpRefs != null)
-            effectiveToolFilter = AvailableTools.Concat(agentMcpRefs).ToArray();
-        else if (AvailableTools == null && agentMcpRefs != null)
-            effectiveToolFilter = agentMcpRefs;
-
-        if (McpConfigFile is not null)
-        {
-            mcpConfig = McpConfigLoader.Load(ResolvePSPath(McpConfigFile));
-
-            var filtered = ToolFilterHelper.FilterMcpServers(mcpConfig, effectiveToolFilter);
-
-            // Wrap local MCP servers through mcp-wrapper for env var support (default)
-            if (!NoMcpWrapper.IsPresent && filtered is not null)
-            {
-                var wrapperPath = McpWrapperHelper.ResolveWrapperPath();
-                if (wrapperPath is not null)
-                {
-                    filtered = McpWrapperHelper.WrapLocalServers(filtered, wrapperPath);
-                    WriteVerbose($"MCP servers wrapped via: {wrapperPath}");
-                }
-                else
-                {
-                    WriteWarning("mcp-wrapper executable not found — MCP servers will be launched directly (env vars may not propagate).");
-                }
-            }
-
-            sessionConfig.McpServers = filtered;
-        }
-
-        // Pass AvailableTools to session — either explicit or derived from agent tool refs.
-        // Wildcards (ado-*) and bare server names (ado) need discovery to expand to exact names.
-        // GetAllToolRefsFromAgents includes translated VS Code tools + MCP patterns.
-        var agentAllRefs = ToolFilterHelper.GetAllToolRefsFromAgents(allAgents);
-        var sessionTools = AvailableTools ?? agentAllRefs;
-        Dictionary<string, List<string>>? discoveredTools = null;
-        if (sessionTools is not null && mcpConfig is not null)
-        {
-            var serversToDiscover = ToolFilterHelper.GetServersNeedingDiscovery(sessionTools, mcpConfig);
-            if (serversToDiscover.Count > 0)
-            {
-                WriteVerbose($"Discovering tools from MCP servers: {string.Join(", ", serversToDiscover)}");
-                discoveredTools = await McpToolDiscovery.DiscoverToolsForServersAsync(
-                    mcpConfig, serversToDiscover, ct: cancellationToken);
-                foreach (var (server, tools) in discoveredTools)
-                {
-                    if (tools.Count > 0)
-                        WriteVerbose($"  {server}: {tools.Count} tools discovered");
-                    else
-                    {
-                        var errorMsg = McpToolDiscovery.LastDiscoveryErrors?.GetValueOrDefault(server);
-                        WriteWarning($"  {server}: no tools discovered — {errorMsg ?? "unknown error"}");
-                    }
-                }
-            }
-        }
-        var mergedTools = ToolFilterHelper.ExpandToolPatterns(sessionTools, discoveredTools);
-        if (mergedTools is not null)
-        {
-            sessionConfig.AvailableTools = mergedTools;
-            WriteVerbose($"Session tool list ({mergedTools.Count} tools): {string.Join(", ", mergedTools.Order())}");
-        }
-        if (ExcludedTools is not null) sessionConfig.ExcludedTools = new List<string>(ExcludedTools);
-
-        // Translate VS Code tool names and expand MCP patterns per-agent
-        ToolFilterHelper.TranslateAgentTools(allAgents, discoveredTools);
-        if (allAgents != null)
-        {
-            foreach (var agent in allAgents)
-            {
-                if (agent.Tools == null || agent.Tools.Count == 0)
-                    WriteVerbose($"Agent '{agent.Name}' tools: <all session tools>");
-                else
-                    WriteVerbose($"Agent '{agent.Name}' tools ({agent.Tools.Count}): {string.Join(", ", agent.Tools.Order())}");
-            }
-        }
-
         // Auto-approve tool permission requests using the SDK's built-in handler
         sessionConfig.OnPermissionRequest = PermissionHandler.ApproveAll;
 
-        // Pre-select agent at session creation (SDK 0.1.33+)
-        // Priority: explicit -Agent > prompt file agent > auto-select single custom agent
-        var agentToSelect = MyInvocation.BoundParameters.ContainsKey(nameof(Agent)) ? Agent : null;
-        if (agentToSelect is null && promptFileResult?.Agent is not null)
+        var setupResult = await SessionSetupHelper.ConfigureAsync(sessionConfig, new SessionSetupOptions
         {
-            agentToSelect = promptFileResult.Agent;
-            WriteVerbose($"Using agent from prompt file: {agentToSelect}");
-        }
-        if (agentToSelect is null && sessionConfig.CustomAgents?.Count == 1)
-        {
-            agentToSelect = sessionConfig.CustomAgents[0].Name;
-            WriteVerbose($"Auto-selecting sole custom agent: {agentToSelect}");
-        }
-        if (agentToSelect is not null)
-        {
-            sessionConfig.Agent = agentToSelect;
-            WriteVerbose($"Pre-selecting agent: {agentToSelect}");
+            CustomAgents = CustomAgents,
+            CustomAgentFiles = CustomAgentFile,
+            AvailableTools = AvailableTools,
+            ExcludedTools = ExcludedTools,
+            McpConfigFile = McpConfigFile,
+            NoMcpWrapper = NoMcpWrapper.IsPresent,
+            Agent = Agent,
+            AgentWasSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(Agent)),
+            PromptFileAgent = promptFileResult?.Agent,
+            ResolvePath = ResolvePSPath,
+            WriteVerbose = WriteVerbose,
+            WriteWarning = WriteWarning
+        }, cancellationToken);
 
-            // Narrow session AvailableTools to the selected agent's scoped tools.
-            // The CLI enforces visibility at the session level, not per-agent.
-            var selectedAgent = allAgents?.FirstOrDefault(a =>
-                string.Equals(a.Name, agentToSelect, StringComparison.OrdinalIgnoreCase));
-            if (selectedAgent?.Tools is { Count: > 0 })
-            {
-                sessionConfig.AvailableTools = selectedAgent.Tools;
-                WriteVerbose($"Narrowed session tools to agent '{agentToSelect}' ({selectedAgent.Tools.Count} tools)");
-            }
-        }
+        WriteVerbose($"Session config JSON:{Environment.NewLine}{ToJson(sessionConfig)}");
 
         await using var session = await client.CreateSessionAsync(sessionConfig);
 

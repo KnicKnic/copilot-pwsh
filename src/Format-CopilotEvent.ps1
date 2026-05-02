@@ -331,6 +331,25 @@ function Format-CopilotEvent {
                 $d = $InputObject.Data
                 Write-ColorLog "[📊 SESSION] Tokens: $($d.CurrentTokens)/$($d.TokenLimit) | Messages: $($d.MessagesLength)" -ForegroundColor DarkCyan
             }
+            "*SubagentSelected*" {
+                $d = $InputObject.Data
+                $tools = @($d.Tools)
+                Write-ColorLog "`n[🤖 AGENT] $($d.AgentName)" -ForegroundColor Cyan
+                if ($tools.Count -gt 0) {
+                    Write-ColorLog "  Tools ($($tools.Count)): $($tools -join ', ')" -ForegroundColor DarkCyan
+                } else {
+                    Write-ColorLog "  Tools: <all session tools>" -ForegroundColor DarkCyan
+                }
+            }
+            "*SessionMcpServersLoaded*" {
+                $servers = @($InputObject.Data.Servers)
+                if ($servers.Count -gt 0) {
+                    $summary = $servers | ForEach-Object {
+                        if ($_.Error) { "$($_.Name)=error:$($_.Error)" } else { "$($_.Name)=status:$($_.Status)" }
+                    }
+                    Write-ColorLog "[🔌 MCP] $($summary -join ', ')" -ForegroundColor DarkCyan
+                }
+            }
             "*PendingMessages*" {
                 # Suppress these verbose events
             }
