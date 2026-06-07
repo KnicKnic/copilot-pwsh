@@ -408,10 +408,21 @@ try{
             else {
                 Write-Host "No prompt success indicator specified, skipping success check." -ForegroundColor Yellow
             }
+
+            if ($success -eq $null) { 
+                $success = $true
+            }
             # Send-CopilotMessage $session -prompt "what tools are available to you, can you say them?" -timeout $(30*60) -stream | Format-CopilotEvent
         }
         finally {
-            Disconnect-CopilotSession $session | Out-Null
+            if ($success -eq $null -or $success -eq $false) {
+                Write-Host "Session did not complete successfully leaving." -ForegroundColor Red
+                Disconnect-CopilotSession $session | Out-Null
+            } else {
+                Write-Host "Session completed successfully, deleting it." -ForegroundColor Green
+                $f = Remove-CopilotSession -SessionId $sessionId -Client $client
+                write-Host "Delete session id $sessionId result: $f" -ForegroundColor Green
+            }
         }
     }
     finally {
