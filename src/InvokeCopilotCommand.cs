@@ -200,6 +200,16 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
 
         await using var session = await client.CreateSessionAsync(sessionConfig);
 
+        try
+        {
+            SessionDataStore.WriteCreationDefaults(sessionConfig.ConfigDir, session.SessionId);
+            WriteVerbose("Session sidecar created with creation defaults.");
+        }
+        catch (Exception ex)
+        {
+            WriteWarning($"Failed to write session sidecar: {ex.Message}");
+        }
+
         // --- Message options ---
         var msgOpts = new MessageOptions { Prompt = effectivePrompt };
 
@@ -294,6 +304,25 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
         if (!Stream.IsPresent && lastAssistantContent is not null)
         {
             WriteObject(lastAssistantContent);
+        }
+    }
+
+    private static readonly JsonSerializerOptions s_verboseJson = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        ReferenceHandler = ReferenceHandler.IgnoreCycles,
+    };
+
+    private static string ToJson(SessionConfig config)
+    {
+        try
+        {
+            return JsonSerializer.Serialize(config, s_verboseJson);
+        }
+        catch (Exception ex)
+        {
+            return $"<unable to serialize session config: {ex.Message}>";
         }
     }
 }

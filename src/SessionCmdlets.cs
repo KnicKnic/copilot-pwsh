@@ -155,6 +155,16 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
         }
         WriteVerbose($"Session created: {session.SessionId}");
 
+        try
+        {
+            SessionDataStore.WriteCreationDefaults(config.ConfigDir, session.SessionId);
+            WriteVerbose("Session sidecar created with creation defaults.");
+        }
+        catch (Exception ex)
+        {
+            WriteWarning($"Failed to write session sidecar: {ex.Message}");
+        }
+
         WriteObject(session);
     }
 }
@@ -279,11 +289,59 @@ public sealed class RemoveCopilotSessionCommand : AsyncPSCmdlet
         HelpMessage = "The session ID to delete.")]
     public string SessionId { get; set; } = null!;
 
+    [Parameter(HelpMessage = "Copilot config directory (default: ~/.copilot). Used to locate the on-disk session-state folder to remove.")]
+    public string? ConfigDir { get; set; }
+
     protected override async Task ProcessRecordAsync()
     {
         if (ShouldProcess(SessionId, "Delete Copilot Session"))
         {
-            await Client.DeleteSessionAsync(SessionId);
+            Exception? deleteError = null;
+            try
+            {
+                await Client.DeleteSessionAsync(SessionId);
+            }
+            catch (Exception ex)
+            {
+                // The SDK deletes the session record from session-store.db. A session
+                // that was never persisted (e.g. no message was ever sent) has no DB
+                // record, so the SDK reports "Session file not found". That's benign —
+                // there's nothing server-side to delete — so don't treat it as terminating.
+                if (ex.Message.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    WriteVerbose($"No server-side session record for {SessionId} (nothing to delete).");
+                }
+                else
+                {
+                    deleteError = ex;
+                }
+            }
+
+            // The SDK delete only removes the server-side record. The on-disk
+            // session-state/<id> folder (including our sidecar) is a separate
+            // artifact that must be removed explicitly — do this regardless of
+            // whether the server-side delete found anything.
+            try
+            {
+                var configDir = SessionDataStore.ResolveConfigDir(ConfigDir);
+                var stateDir = SessionDataStore.SessionStateDir(configDir, SessionId);
+                if (Directory.Exists(stateDir))
+                {
+                    Directory.Delete(stateDir, recursive: true);
+                    WriteVerbose($"Removed session-state folder: {stateDir}");
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteWarning($"Failed to remove session-state folder: {ex.Message}");
+            }
+
+            // Surface a genuine server-side delete failure after on-disk cleanup.
+            if (deleteError is not null)
+            {
+                throw new Exception(
+                    $"Failed to delete session {SessionId}: {deleteError.Message}", deleteError);
+            }
         }
     }
 }

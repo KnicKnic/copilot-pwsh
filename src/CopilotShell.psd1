@@ -38,6 +38,8 @@
         'Get-CopilotSessionMessages'
         'Stop-CopilotSession'
         'Disconnect-CopilotSession'
+        'Set-CopilotSessionData'
+        'Get-CopilotSessionData'
 
         # Messaging
         'Send-CopilotMessage'
