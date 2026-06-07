@@ -310,6 +310,27 @@ copilot-sdk/
 
 This module runs on Windows, macOS, and Linux wherever .NET 8+ and PowerShell 7.4+ are available. No platform-specific dependencies are used.
 
+## References
+
+### GitHub Copilot SDK
+- [GitHub Copilot SDK repository](https://github.com/github/copilot-sdk)
+- [Copilot SDK .NET README](https://github.com/github/copilot-sdk/blob/main/dotnet/README.md)
+- [GitHub.Copilot.SDK on NuGet](https://www.nuget.org/packages/GitHub.Copilot.SDK)
+
+### Project documentation
+- [MCP-WRAPPER.md](MCP-WRAPPER.md) — env var fix + zombie daemon details
+- [STREAMING.md](STREAMING.md) — detailed streaming guide
+- [TOOLS.md](TOOLS.md) — tool pattern reference
+- [goal.md](goal.md) — project goals / spec
+
+### Tooling
+- [PowerShell 7.4+ releases](https://github.com/PowerShell/PowerShell/releases)
+- [Copilot Dash](https://github.com/KnicKnic/copilot-dash) — run/result visualizer with browser extension
+
+### Tracked upstream SDK issues
+- [copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) — bare MCP server name in agent `Tools` not expanded — agent sees zero MCP tools
+- [copilot-sdk#1019](https://github.com/github/copilot-sdk/issues/1019) — per-agent tool visibility for custom sub-agents (hide tools from main agent to force delegation)
+
 ## License
 
 MIT
