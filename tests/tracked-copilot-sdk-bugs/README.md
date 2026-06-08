@@ -38,6 +38,7 @@ dotnet run -- --list
 | **McpToolDiscovery** | No | Attaches an MCP server to a session and checks that its tools become visible to the model. Fixed in `0.2.2-preview.0`. |
 | **McpToolExplicit** | No | MCP server with explicit tool names in `AvailableTools` — tools correctly exposed. Fixed in `0.2.2-preview.0`. |
 | **McpToolSpecified** | Yes | Same as McpToolDiscovery but sets `SessionConfig.AvailableTools = ["test-mcp"]` (server name) — MCP tools are NOT exposed. |
+| **McpToolWildcard** | Yes | Same as McpToolDiscovery but sets `SessionConfig.AvailableTools = ["test-mcp/*"]` (wildcard) — MCP tools are NOT exposed. |
 | **McpToolAgentScoped** | Yes | Agent with `Tools = ["test-mcp"]` selected via `Rpc.Agent.SelectAsync` — MCP tools should be exposed through the agent's tool scope. |
 | **McpToolAgentScopedExplicit** | Yes | Agent with explicit MCP tool names selected via `Rpc.Agent.SelectAsync` — MCP tools not exposed. |
 | **McpToolAgentScopedExplicitSession** | Yes | Agent with explicit MCP tool names + session `AvailableTools` — MCP tools not exposed, wrong tools visible. |
@@ -46,14 +47,22 @@ dotnet run -- --list
 
 | Issue | Description | Tests |
 |-------|-------------|-------|
-| [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861) | Agent tool scoping (`CustomAgentConfig.Tools`) not enforced | AgentToolScopingSessionAgent, AgentToolScopingPostSelect |
-| [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) | MCP server tools not discoverable by the model | McpToolDiscovery, McpToolSpecified |
-| [github/copilot-sdk#859](https://github.com/github/copilot-sdk/issues/859) | MCP tools not exposed through agent tool scope | McpToolAgentScoped |
+| [github/copilot-sdk#859](https://github.com/github/copilot-sdk/issues/859) | Agent pre-selected via `SessionConfig.Agent` did not enforce `CustomAgentConfig.Tools` | AgentToolScopingSessionAgent |
+| [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) | Agent `Tools` entries using bare MCP server names are not expanded to MCP tools | McpToolAgentScoped |
+| [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861) | MCP server tools not exposed with expected naming when using `AvailableTools` | McpToolSpecified, McpToolWildcard |
+| Related to [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) / [#1019](https://github.com/github/copilot-sdk/issues/1019) | Explicit MCP tool names in agent scope still do not expose MCP tools | McpToolAgentScopedExplicit, McpToolAgentScopedExplicitSession |
+
+> **2026-06-07:** Tested with SDK `1.0.0` / required CLI `1.0.57`:
+> - **#859** — Resolved. `SessionConfig.Agent` preselect now enforces `CustomAgentConfig.Tools`; the model only reported `view`.
+> - **#860** — Still reproduces. Agent `Tools = ["test-mcp"]` sees no MCP tools.
+> - **#861 / server-name and wildcard AvailableTools** — Still reproduces in this local suite. `AvailableTools = ["test-mcp"]` and `AvailableTools = ["test-mcp/*"]` report built-in tools but none of `test-mcp-alpha`, `test-mcp-beta`, or `test-mcp-gamma`.
+> - **Explicit MCP tool names without agent scope** — Works. `McpToolExplicit` sees all three expected MCP tools.
+> - **Explicit MCP tool names in agent scope** — Still reproduces. Agent-scoped explicit MCP tool names do not surface the MCP tools.
 
 > **2026-04-09:** Tested with SDK `0.2.2-preview.0` / CLI `1.0.20-1`:
-> - **#861** — Fully resolved. Agent tool scoping works for both `SessionConfig.Agent` and `Rpc.Agent.SelectAsync`.
-> - **#860** — Partially fixed. Basic MCP tool discovery works, but `AvailableTools` with server name doesn't surface MCP tools.
-> - **#859** — Still reproduces. MCP tools not exposed through agent tool scope.
+> - **#859** — Fully resolved. Agent tool scoping works for both `SessionConfig.Agent` and `Rpc.Agent.SelectAsync`.
+> - **#860** — Still reproduces for agent-scoped bare MCP server names.
+> - **#861 / server-name AvailableTools** — Partially fixed. Basic MCP tool discovery works, but `AvailableTools` with server name doesn't surface MCP tools.
 >
 > **2026-04-01:** All three issues still reproduce with SDK `0.2.1-preview.1` / CLI `1.0.12-0`.
 

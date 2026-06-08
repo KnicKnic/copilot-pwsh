@@ -2,7 +2,7 @@
 // Shared helper for McpTool* tests — local test MCP server management
 // ============================================================================
 
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -223,7 +223,7 @@ internal static class TestMcpServerHelper
     {
         var done = new TaskCompletionSource();
         string? content = null;
-        using var sub = session.On(evt =>
+        using var sub = session.On<SessionEvent>(evt =>
         {
             switch (evt)
             {

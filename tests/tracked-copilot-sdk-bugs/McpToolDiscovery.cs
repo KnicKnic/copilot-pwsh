@@ -9,7 +9,7 @@
 // Run:  dotnet run -- McpToolDiscovery
 // ============================================================================
 
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 public class McpToolDiscovery : IBugRepro
 {
@@ -31,7 +31,7 @@ public class McpToolDiscovery : IBugRepro
         Console.WriteLine($"  Command: {mcpServer.Command} {string.Join(" ", mcpServer.Args!)}");
         Console.WriteLine();
 
-        await using var client = new CopilotClient(new CopilotClientOptions { CliPath = cliPath });
+        await using var client = new CopilotClient(new CopilotClientOptions { Connection = RuntimeConnection.ForStdio(path: cliPath) });
         await client.StartAsync();
 
         var sessionConfig = new SessionConfig

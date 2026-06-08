@@ -12,7 +12,7 @@
 // Run:  dotnet run -- AgentToolScopingPostSelect
 // ============================================================================
 
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 public class AgentToolScopingPostSelect : IBugRepro
 {
@@ -42,7 +42,7 @@ public class AgentToolScopingPostSelect : IBugRepro
         Console.WriteLine();
 
         Console.WriteLine($"Starting client with CLI: {cliPath}");
-        await using var client = new CopilotClient(new CopilotClientOptions { CliPath = cliPath });
+        await using var client = new CopilotClient(new CopilotClientOptions { Connection = RuntimeConnection.ForStdio(path: cliPath) });
         await client.StartAsync();
 
         // Do NOT pre-select — leave SessionConfig.Agent unset
@@ -114,7 +114,7 @@ public class AgentToolScopingPostSelect : IBugRepro
     {
         var done = new TaskCompletionSource();
         string? content = null;
-        using var sub = session.On(evt =>
+        using var sub = session.On<SessionEvent>(evt =>
         {
             switch (evt)
             {

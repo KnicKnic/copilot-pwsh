@@ -8,7 +8,7 @@
 // Run:  dotnet run -- McpToolSpecified
 // ============================================================================
 
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 public class McpToolSpecified : IBugRepro
 {
@@ -31,7 +31,7 @@ public class McpToolSpecified : IBugRepro
         Console.WriteLine($"  AvailableTools: [\"{TestMcpServerHelper.McpServerName}\"]");
         Console.WriteLine();
 
-        await using var client = new CopilotClient(new CopilotClientOptions { CliPath = cliPath });
+        await using var client = new CopilotClient(new CopilotClientOptions { Connection = RuntimeConnection.ForStdio(path: cliPath) });
         await client.StartAsync();
 
         var sessionConfig = new SessionConfig

@@ -9,7 +9,7 @@
 // Run:  dotnet run -- McpToolAgentScoped
 // ============================================================================
 
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 public class McpToolAgentScoped : IBugRepro
 {
@@ -41,7 +41,7 @@ public class McpToolAgentScoped : IBugRepro
         Console.WriteLine($"  Tools: [{string.Join(", ", agent.Tools!)}]");
         Console.WriteLine();
 
-        await using var client = new CopilotClient(new CopilotClientOptions { CliPath = cliPath });
+        await using var client = new CopilotClient(new CopilotClientOptions { Connection = RuntimeConnection.ForStdio(path: cliPath) });
         await client.StartAsync();
 
         var sessionConfig = new SessionConfig

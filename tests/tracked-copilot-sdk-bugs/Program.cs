@@ -14,7 +14,7 @@
 // in the current working directory. Use --download to fetch it from npm.
 // ============================================================================
 
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 using System.Diagnostics;
 using System.Formats.Tar;
 using System.IO.Compression;
