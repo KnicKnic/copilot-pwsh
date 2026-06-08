@@ -326,6 +326,7 @@ This module runs on Windows, macOS, and Linux wherever .NET 8+ and PowerShell 7.
 ### Tooling
 - [PowerShell 7.4+ releases](https://github.com/PowerShell/PowerShell/releases)
 - [Copilot Dash](https://github.com/KnicKnic/copilot-dash) — run/result visualizer with browser extension
+- [copilot-cleaner](https://github.com/KnicKnic/copilot-cleaner) — local cross-platform C# Avalonia app for inspecting and cleaning GitHub Copilot session-state folders
 
 ### Tracked upstream SDK issues
 - [copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) — bare MCP server name in agent `Tools` not expanded — agent sees zero MCP tools
