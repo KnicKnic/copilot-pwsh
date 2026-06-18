@@ -83,7 +83,7 @@ public class AgentToolScopingSubagent : IBugRepro
         Console.WriteLine();
 
         // Parse reported tools from the response
-        var ignoredTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "skill", "report_intent" };
+        var ignoredTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "skill", "report_intent", "sql" };
         var reportedTools = response
             .Split(new[] { ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(t => !string.IsNullOrWhiteSpace(t) && !ignoredTools.Contains(t))

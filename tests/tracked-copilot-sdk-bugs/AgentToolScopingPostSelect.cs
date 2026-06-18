@@ -80,7 +80,7 @@ public class AgentToolScopingPostSelect : IBugRepro
         var allowedTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "view" };
 
         // Tools injected by the CLI that aren't part of the agent's declared list — ignore these
-        var ignoredTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "skill", "report_intent" };
+        var ignoredTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "skill", "report_intent", "sql" };
 
         var reportedTools = toolsResponse
             .Split(new[] { ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)

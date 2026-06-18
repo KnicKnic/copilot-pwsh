@@ -6,10 +6,8 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <DefaultItemExcludes>$(DefaultItemExcludes);test-mcp-server\**;self_contained\**;investigate-sql-tool\**</DefaultItemExcludes>
   </PropertyGroup>
 
-  <!-- Embed the CLI version from the SDK's MSBuild property into our assembly -->
   <ItemGroup>
     <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
       <_Parameter1>CopilotCliVersion</_Parameter1>

@@ -169,7 +169,7 @@ internal static class TestMcpServerHelper
     /// </summary>
     public static int ValidateToolResponse(string response, IEnumerable<string> expectedTools)
     {
-        var ignoredTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "skill", "report_intent" };
+        var ignoredTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "skill", "report_intent", "sql" };
         var reportedTools = response
             .Split(new[] { ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(t => !string.IsNullOrWhiteSpace(t) && !ignoredTools.Contains(t))

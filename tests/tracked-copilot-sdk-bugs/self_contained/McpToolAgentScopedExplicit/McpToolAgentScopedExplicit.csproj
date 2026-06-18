@@ -6,10 +6,12 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <DefaultItemExcludes>$(DefaultItemExcludes);test-mcp-server\**;self_contained\**;investigate-sql-tool\**</DefaultItemExcludes>
+    <!-- The bundled MCP server is a separate project; don't compile it here. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);test-mcp-server\**</DefaultItemExcludes>
   </PropertyGroup>
 
-  <!-- Embed the CLI version from the SDK's MSBuild property into our assembly -->
+  <!-- Embed the CLI version required by the SDK into our assembly so the
+       repro can auto-download the matching Copilot CLI. -->
   <ItemGroup>
     <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
       <_Parameter1>CopilotCliVersion</_Parameter1>

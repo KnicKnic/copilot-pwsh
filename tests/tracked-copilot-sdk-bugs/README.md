@@ -52,6 +52,12 @@ dotnet run -- --list
 | [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861) | MCP server tools not exposed with expected naming when using `AvailableTools` | McpToolSpecified, McpToolWildcard |
 | Related to [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) / [#1019](https://github.com/github/copilot-sdk/issues/1019) | Explicit MCP tool names in agent scope still do not expose MCP tools | McpToolAgentScopedExplicit, McpToolAgentScopedExplicitSession |
 
+> **2026-06-17:** Tested with SDK `1.0.2` / required CLI `1.0.64-0`:
+> - **#859 (SessionConfig.Agent preselect) and agent post-select (`Rpc.Agent.SelectAsync`)** — Still passing. The CLI now injects an extra built-in `sql` tool (per-session SQLite for task tracking); once it is ignored alongside `skill`/`report_intent`, the agent `Tools = ["view"]` allow-list is correctly enforced.
+> - **#860 / #861 and agent-scoped MCP variants** — Still reproduce (`McpToolAgentScoped`, `McpToolAgentScopedExplicit`, `McpToolAgentScopedExplicitSession`, `McpToolSpecified`, `McpToolWildcard`).
+> - **Still passing:** `AgentToolScopingPostSelect`, `AgentToolScopingSessionAgent`, `AgentToolScopingSubagent`, `McpToolDiscovery`, `McpToolExplicit`.
+> - Each non-passing scenario has a standalone reproduction under [`self_contained/`](self_contained/README.md).
+
 > **2026-06-07:** Tested with SDK `1.0.0` / required CLI `1.0.57`:
 > - **#859** — Resolved. `SessionConfig.Agent` preselect now enforces `CustomAgentConfig.Tools`; the model only reported `view`.
 > - **#860** — Still reproduces. Agent `Tools = ["test-mcp"]` sees no MCP tools.
