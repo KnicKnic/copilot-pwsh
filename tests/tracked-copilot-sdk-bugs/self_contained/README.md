@@ -15,7 +15,7 @@ found in a parent folder), so a bare `dotnet run -c Release` is enough.
 
 | Scenario | Kind | What it shows |
 |----------|------|---------------|
-| [McpSessionAvailableTools](McpSessionAvailableTools) | Known bug | A single repro that tries every session `AvailableTools` selector form against the same MCP server. Only the dashed-explicit form (`test-mcp-alpha`, ...) exposes the tools; the namespaced (`test-mcp/alpha`), dash-wildcard (`test-mcp-*`), and slash-wildcard (`test-mcp/*`) forms all fail (#861). |
+| [McpSessionAvailableTools](McpSessionAvailableTools) | Known bug | A single repro that tries every session `AvailableTools` selector form against the same MCP server. Only the dashed-explicit form (`test-mcp-alpha`, ...) exposes the tools; the bare server name (`test-mcp`), namespaced (`test-mcp/alpha`), dash-wildcard (`test-mcp-*`), and slash-wildcard (`test-mcp/*`) forms all fail (#861). |
 
 **Known bug** = continues to reproduce as already tracked.
 

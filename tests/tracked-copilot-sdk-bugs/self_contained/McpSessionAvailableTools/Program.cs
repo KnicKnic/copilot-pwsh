@@ -10,16 +10,17 @@
 // At the session level the CLI only honors the explicit DASHED tool names
 // (test-mcp-alpha, ...). Every other form below fails to expose the MCP tools:
 //
-//   1. explicit namespaced / slash names   ["test-mcp/alpha", ...]   -> FAILS
-//   2. dash wildcard                        ["test-mcp-*"]            -> FAILS
-//   3. slash wildcard                       ["test-mcp/*"]            -> FAILS
+//   1. bare server name                     ["test-mcp"]              -> FAILS
+//   2. explicit namespaced / slash names    ["test-mcp/alpha", ...]   -> FAILS
+//   3. dash wildcard                        ["test-mcp-*"]            -> FAILS
+//   4. slash wildcard                       ["test-mcp/*"]            -> FAILS
 //
 // For reference the working baseline form is also exercised:
 //
 //   0. explicit dashed names                ["test-mcp-alpha", ...]   -> works
 //
 // EXPECTED (once fixed): every form exposes test-mcp-alpha/beta/gamma.
-// ACTUAL:   only the dashed-explicit form exposes them; forms 1-3 reproduce
+// ACTUAL:   only the dashed-explicit form exposes them; forms 1-4 reproduce
 //           the bug (model sees only built-in tools).
 //
 // Exit code: 0 only if EVERY bug form (1-3) now exposes the MCP tools (fully
@@ -58,6 +59,7 @@ await client.StartAsync();
 var scenarios = new (string Label, string[] AvailableTools, bool IsBug)[]
 {
     ("explicit dashed  [test-mcp-alpha, ...]   (baseline)", McpHelper.Prefixed,         false),
+    ("bare server name [test-mcp]              (bug)",      new[] { McpHelper.ServerName },    true),
     ("explicit slash   [test-mcp/alpha, ...]   (bug)",      McpHelper.Namespaced,       true),
     ("dash wildcard    [test-mcp-*]            (bug)",       new[] { McpHelper.DashWildcard },  true),
     ("slash wildcard   [test-mcp/*]            (bug)",       new[] { McpHelper.SlashWildcard }, true),

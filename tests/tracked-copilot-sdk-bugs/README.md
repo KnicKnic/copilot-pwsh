@@ -38,6 +38,7 @@ dotnet run -- --list
 | **McpToolDiscovery** | No | Attaches an MCP server to a session and checks that its tools become visible to the model. Fixed in `0.2.2-preview.0`. |
 | **McpToolExplicit** | No | MCP server with explicit dashed tool names (`test-mcp-alpha`, ...) in session `AvailableTools` — tools correctly exposed. Fixed in `0.2.2-preview.0`. |
 | **McpToolExplicitNamespaced** | Yes | Session `AvailableTools = ["test-mcp/alpha", ...]` (namespaced/slash explicit names) — MCP tools are NOT exposed (slash form only matches at the agent level). |
+| **McpToolServerName** | Yes | Session `AvailableTools = ["test-mcp"]` (bare server name) — MCP tools are NOT exposed. |
 | **McpToolSpecified** | Yes | Same as McpToolDiscovery but sets session `AvailableTools = ["test-mcp-*"]` (dash wildcard) — MCP tools are NOT exposed (no wildcard form works at the session level). |
 | **McpToolWildcard** | Yes | Same as McpToolDiscovery but sets session `AvailableTools = ["test-mcp/*"]` (slash wildcard) — MCP tools are NOT exposed. |
 | **McpToolAgentScoped** | No | Agent with `Tools = ["test-mcp/*"]` (wildcard) selected via `Rpc.Agent.SelectAsync` — MCP tools correctly exposed through the agent's tool scope. |
@@ -50,7 +51,7 @@ dotnet run -- --list
 |-------|-------------|-------|
 | [github/copilot-sdk#859](https://github.com/github/copilot-sdk/issues/859) | Agent pre-selected via `SessionConfig.Agent` did not enforce `CustomAgentConfig.Tools` | AgentToolScopingSessionAgent |
 | [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) | Agent `Tools` entries using bare MCP server names are not expanded to MCP tools (resolved by using the namespaced `test-mcp/*` / `test-mcp/alpha` form) | McpToolAgentScoped, McpToolAgentScopedExplicit, McpToolAgentScopedExplicitSession |
-| [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861) | MCP server tools not exposed via session `AvailableTools` for any non-dashed-explicit form (namespaced `test-mcp/alpha`, dash wildcard `test-mcp-*`, or slash wildcard `test-mcp/*`) | McpToolExplicitNamespaced, McpToolSpecified, McpToolWildcard |
+| [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861) | MCP server tools not exposed via session `AvailableTools` for any non-dashed-explicit form (bare server name `test-mcp`, namespaced `test-mcp/alpha`, dash wildcard `test-mcp-*`, or slash wildcard `test-mcp/*`) | McpToolServerName, McpToolExplicitNamespaced, McpToolSpecified, McpToolWildcard |
 
 > **2026-06-19:** Adopted the SDK team's namespaced-selector guidance and mapped
 > out where each selector form works. MCP tools are matched by their namespaced
@@ -62,12 +63,13 @@ dotnet run -- --list
 >   `test-mcp/alpha` made all three **pass** (#860 effectively resolved).
 > - **Session level** (`SessionConfig.AvailableTools`) — only the **dashed
 >   explicit** form (`test-mcp-alpha`, ...) works (`McpToolExplicit`). Every
->   other form fails (#861): namespaced explicit `test-mcp/alpha`
->   (`McpToolExplicitNamespaced`), dash wildcard `test-mcp-*` (`McpToolSpecified`),
->   and slash wildcard `test-mcp/*` (`McpToolWildcard`) — so no slash and no
->   wildcard form works there. Each form is now a separate main-suite test so it
->   can flip to **PASS** independently when fixed, while the `self_contained/`
->   folder holds a single combined repro,
+>   other form fails (#861): bare server name `test-mcp` (`McpToolServerName`),
+>   namespaced explicit `test-mcp/alpha` (`McpToolExplicitNamespaced`), dash
+>   wildcard `test-mcp-*` (`McpToolSpecified`), and slash wildcard `test-mcp/*`
+>   (`McpToolWildcard`) — so no bare-name, slash, or wildcard form works there.
+>   Each form is now a separate main-suite test so it can flip to **PASS**
+>   independently when fixed, while the `self_contained/` folder holds a single
+>   combined repro,
 >   [`McpSessionAvailableTools`](self_contained/McpSessionAvailableTools), that
 >   exercises all forms and exits non-zero while any still fails.
 > - The model always reports tools back in the dashed form (`test-mcp-alpha`),

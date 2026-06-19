@@ -24,9 +24,10 @@ model to list its tools:
 | # | `AvailableTools` form | Example | Result |
 |---|-----------------------|---------|--------|
 | 0 | explicit dashed names (baseline) | `["test-mcp-alpha", ...]` | ✅ exposed |
-| 1 | explicit namespaced / slash names | `["test-mcp/alpha", ...]` | ❌ not exposed |
-| 2 | dash wildcard | `["test-mcp-*"]` | ❌ not exposed |
-| 3 | slash wildcard | `["test-mcp/*"]` | ❌ not exposed |
+| 1 | bare server name | `["test-mcp"]` | ❌ not exposed |
+| 2 | explicit namespaced / slash names | `["test-mcp/alpha", ...]` | ❌ not exposed |
+| 3 | dash wildcard | `["test-mcp-*"]` | ❌ not exposed |
+| 4 | slash wildcard | `["test-mcp/*"]` | ❌ not exposed |
 
 At the session level the CLI only honors the **dashed explicit** names; every
 other form fails to expose the MCP tools. (The slash form works at the **agent**
