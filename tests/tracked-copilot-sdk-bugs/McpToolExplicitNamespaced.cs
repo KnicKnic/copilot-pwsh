@@ -1,21 +1,24 @@
 // ============================================================================
-// Test: MCP tools via agent with explicit tool list (local test server)
+// Test: MCP server with session AvailableTools = ["test-mcp/alpha", ...]
+//       (explicit namespaced / slash names)
 // ============================================================================
 //
-// An agent is configured with Tools listing all 3 test MCP tools by their
-// namespaced names (test-mcp/alpha, test-mcp/beta, test-mcp/gamma). The agent is
-// selected via Rpc.Agent.SelectAsync. The model should see exactly those tools.
+// Attaches a local test MCP server and sets SessionConfig.AvailableTools to the
+// explicit namespaced (slash) tool names (test-mcp/alpha, test-mcp/beta,
+// test-mcp/gamma). At the session level only the dashed explicit names
+// (test-mcp-alpha, ...) are honored, so the slash form does NOT expose the MCP
+// tools. (The slash form works at the agent level, but not here.)
 //
-// Run:  dotnet run -- McpToolAgentScopedExplicit
+// Run:  dotnet run -- McpToolExplicitNamespaced
 // ============================================================================
 
 using GitHub.Copilot;
 
-public class McpToolAgentScopedExplicit : IBugRepro
+public class McpToolExplicitNamespaced : IBugRepro
 {
-    public bool ExpectsFail => false;
+    public bool ExpectsFail => true;
     public string Description =>
-        "Agent with explicit local MCP tool names via SelectAsync: MCP tools should be exposed";
+        "MCP server with session AvailableTools = [\"test-mcp/alpha\", ...] (namespaced explicit): tools NOT exposed";
 
     public async Task<int> RunAsync(string cliPath)
     {
@@ -27,18 +30,9 @@ public class McpToolAgentScopedExplicit : IBugRepro
 
         var mcpServer = TestMcpServerHelper.CreateMcpConfig(project);
 
-        var agent = new CustomAgentConfig
-        {
-            Name = "mcp-agent-explicit",
-            Description = "Agent with explicit test MCP tool names",
-            Prompt = "You have access to test MCP server tools. When asked to list tools, output ONLY a comma-separated list of tool names.",
-            Tools = new List<string>(TestMcpServerHelper.NamespacedToolNames)
-        };
-
         Console.WriteLine($"MCP server: {TestMcpServerHelper.McpServerName}");
         Console.WriteLine($"  Command: {mcpServer.Command} {string.Join(" ", mcpServer.Args!)}");
-        Console.WriteLine($"Agent: {agent.Name}");
-        Console.WriteLine($"  Tools ({agent.Tools!.Count}): [{string.Join(", ", agent.Tools)}]");
+        Console.WriteLine($"  AvailableTools ({TestMcpServerHelper.NamespacedToolNames.Count}): [{string.Join(", ", TestMcpServerHelper.NamespacedToolNames)}]");
         Console.WriteLine();
 
         await using var client = new CopilotClient(new CopilotClientOptions { Connection = RuntimeConnection.ForStdio(path: cliPath) });
@@ -51,18 +45,13 @@ public class McpToolAgentScopedExplicit : IBugRepro
             {
                 [TestMcpServerHelper.McpServerName] = mcpServer
             },
-            CustomAgents = new List<CustomAgentConfig> { agent },
+            AvailableTools = new List<string>(TestMcpServerHelper.NamespacedToolNames),
             OnPermissionRequest = PermissionHandler.ApproveAll,
         };
 
-        Console.WriteLine("Creating session...");
+        Console.WriteLine("Creating session with explicit namespaced MCP tool names in AvailableTools...");
         await using var session = await client.CreateSessionAsync(sessionConfig);
         Console.WriteLine("Session created.");
-        Console.WriteLine();
-
-        Console.WriteLine("Selecting agent 'mcp-agent-explicit' via Rpc.Agent.SelectAsync...");
-        await session.Rpc.Agent.SelectAsync("mcp-agent-explicit");
-        Console.WriteLine("Agent selected.");
         Console.WriteLine();
 
         Console.WriteLine("Asking model to list all its tools...");

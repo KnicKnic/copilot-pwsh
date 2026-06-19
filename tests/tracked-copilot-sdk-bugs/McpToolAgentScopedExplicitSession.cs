@@ -13,7 +13,7 @@ using GitHub.Copilot;
 
 public class McpToolAgentScopedExplicitSession : IBugRepro
 {
-    public bool ExpectsFail => true;
+    public bool ExpectsFail => false;
     public string Description =>
         "Agent with explicit local MCP tool names + session AvailableTools: MCP tools should be exposed";
 
@@ -32,7 +32,7 @@ public class McpToolAgentScopedExplicitSession : IBugRepro
             Name = "mcp-agent-explicit-session",
             Description = "Agent with explicit test MCP tool names",
             Prompt = "You have access to test MCP server tools. When asked to list tools, output ONLY a comma-separated list of tool names.",
-            Tools = new List<string>(TestMcpServerHelper.PrefixedToolNames)
+            Tools = new List<string>(TestMcpServerHelper.NamespacedToolNames)
         };
 
         Console.WriteLine($"MCP server: {TestMcpServerHelper.McpServerName}");

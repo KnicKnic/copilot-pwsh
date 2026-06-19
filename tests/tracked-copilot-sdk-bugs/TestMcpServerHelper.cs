@@ -21,7 +21,8 @@ internal static class TestMcpServerHelper
     public static readonly List<string> RawToolNames = new() { "alpha", "beta", "gamma" };
 
     /// <summary>
-    /// The 3 tool names as the CLI presents them (server-name prefixed).
+    /// The 3 tool names as the CLI presents them to the model (server-name dash-prefixed).
+    /// This is the form the model echoes back, so it is used for validating responses.
     /// </summary>
     public static readonly List<string> PrefixedToolNames = new()
     {
@@ -29,6 +30,30 @@ internal static class TestMcpServerHelper
         "test-mcp-beta",
         "test-mcp-gamma",
     };
+
+    /// <summary>
+    /// The 3 tool names as namespaced selectors (server-name slash tool). This is the
+    /// form matched by agent Tools / AvailableTools, per the SDK team: MCP tools are
+    /// only matched by their namespaced name (test-mcp/alpha) or the test-mcp/* wildcard.
+    /// </summary>
+    public static readonly List<string> NamespacedToolNames = new()
+    {
+        "test-mcp/alpha",
+        "test-mcp/beta",
+        "test-mcp/gamma",
+    };
+
+    /// <summary>
+    /// Wildcard selector matching every tool exposed by the test MCP server.
+    /// </summary>
+    public const string WildcardSelector = "test-mcp/*";
+
+    /// <summary>
+    /// Dash-form wildcard selector (server-name dash star). This is the form that
+    /// matches at the session level (SessionConfig.AvailableTools), mirroring the
+    /// dashed prefixed tool names the CLI presents to the model.
+    /// </summary>
+    public const string DashWildcardSelector = "test-mcp-*";
 
     /// <summary>
     /// Resolves the path to test-mcp-server.csproj relative to the test runner binary.

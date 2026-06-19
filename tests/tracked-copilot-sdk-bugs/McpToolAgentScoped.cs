@@ -2,7 +2,7 @@
 // Test: MCP tools via agent with Tools = ["test-mcp"] (bare server name)
 // ============================================================================
 //
-// An agent is configured with Tools = ["test-mcp"] (bare MCP server name).
+// An agent is configured with Tools = ["test-mcp/*"] (namespaced wildcard).
 // The agent is selected via Rpc.Agent.SelectAsync. The model should see the
 // MCP server's tools through the agent's tool scope.
 //
@@ -13,9 +13,9 @@ using GitHub.Copilot;
 
 public class McpToolAgentScoped : IBugRepro
 {
-    public bool ExpectsFail => true;
+    public bool ExpectsFail => false;
     public string Description =>
-        "Agent with Tools = [\"test-mcp\"] selected via SelectAsync: MCP tools should be exposed";
+        "Agent with Tools = [\"test-mcp/*\"] selected via SelectAsync: MCP tools should be exposed";
 
     public async Task<int> RunAsync(string cliPath)
     {
@@ -32,7 +32,7 @@ public class McpToolAgentScoped : IBugRepro
             Name = "mcp-agent",
             Description = "Agent with access to test-mcp tools",
             Prompt = "You have access to test MCP server tools. When asked to list tools, output ONLY a comma-separated list of tool names.",
-            Tools = new List<string> { TestMcpServerHelper.McpServerName }
+            Tools = new List<string> { TestMcpServerHelper.WildcardSelector }
         };
 
         Console.WriteLine($"MCP server: {TestMcpServerHelper.McpServerName}");

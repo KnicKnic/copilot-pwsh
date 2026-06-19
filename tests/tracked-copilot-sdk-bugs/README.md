@@ -36,21 +36,44 @@ dotnet run -- --list
 | **AgentToolScopingSessionAgent** | No | Agent pre-selected via `SessionConfig.Agent` — `CustomAgentConfig.Tools` correctly restricts tool visibility. Fixed in `0.2.2-preview.0`. |
 | **AgentToolScopingSubagent** | No | Restricted agent delegates to unrestricted agent via the `task` tool — validates that subagent delegation correctly switches tool scope. |
 | **McpToolDiscovery** | No | Attaches an MCP server to a session and checks that its tools become visible to the model. Fixed in `0.2.2-preview.0`. |
-| **McpToolExplicit** | No | MCP server with explicit tool names in `AvailableTools` — tools correctly exposed. Fixed in `0.2.2-preview.0`. |
-| **McpToolSpecified** | Yes | Same as McpToolDiscovery but sets `SessionConfig.AvailableTools = ["test-mcp"]` (server name) — MCP tools are NOT exposed. |
-| **McpToolWildcard** | Yes | Same as McpToolDiscovery but sets `SessionConfig.AvailableTools = ["test-mcp/*"]` (wildcard) — MCP tools are NOT exposed. |
-| **McpToolAgentScoped** | Yes | Agent with `Tools = ["test-mcp"]` selected via `Rpc.Agent.SelectAsync` — MCP tools should be exposed through the agent's tool scope. |
-| **McpToolAgentScopedExplicit** | Yes | Agent with explicit MCP tool names selected via `Rpc.Agent.SelectAsync` — MCP tools not exposed. |
-| **McpToolAgentScopedExplicitSession** | Yes | Agent with explicit MCP tool names + session `AvailableTools` — MCP tools not exposed, wrong tools visible. |
+| **McpToolExplicit** | No | MCP server with explicit dashed tool names (`test-mcp-alpha`, ...) in session `AvailableTools` — tools correctly exposed. Fixed in `0.2.2-preview.0`. |
+| **McpToolExplicitNamespaced** | Yes | Session `AvailableTools = ["test-mcp/alpha", ...]` (namespaced/slash explicit names) — MCP tools are NOT exposed (slash form only matches at the agent level). |
+| **McpToolSpecified** | Yes | Same as McpToolDiscovery but sets session `AvailableTools = ["test-mcp-*"]` (dash wildcard) — MCP tools are NOT exposed (no wildcard form works at the session level). |
+| **McpToolWildcard** | Yes | Same as McpToolDiscovery but sets session `AvailableTools = ["test-mcp/*"]` (slash wildcard) — MCP tools are NOT exposed. |
+| **McpToolAgentScoped** | No | Agent with `Tools = ["test-mcp/*"]` (wildcard) selected via `Rpc.Agent.SelectAsync` — MCP tools correctly exposed through the agent's tool scope. |
+| **McpToolAgentScopedExplicit** | No | Agent with explicit namespaced tool names (`test-mcp/alpha`, ...) — MCP tools correctly exposed. |
+| **McpToolAgentScopedExplicitSession** | No | Agent with namespaced tool names (`test-mcp/alpha`, ...) + session `AvailableTools` with dashed names — MCP tools correctly exposed. |
 
 ## Tracked Issues
 
 | Issue | Description | Tests |
 |-------|-------------|-------|
 | [github/copilot-sdk#859](https://github.com/github/copilot-sdk/issues/859) | Agent pre-selected via `SessionConfig.Agent` did not enforce `CustomAgentConfig.Tools` | AgentToolScopingSessionAgent |
-| [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) | Agent `Tools` entries using bare MCP server names are not expanded to MCP tools | McpToolAgentScoped |
-| [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861) | MCP server tools not exposed with expected naming when using `AvailableTools` | McpToolSpecified, McpToolWildcard |
-| Related to [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) / [#1019](https://github.com/github/copilot-sdk/issues/1019) | Explicit MCP tool names in agent scope still do not expose MCP tools | McpToolAgentScopedExplicit, McpToolAgentScopedExplicitSession |
+| [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) | Agent `Tools` entries using bare MCP server names are not expanded to MCP tools (resolved by using the namespaced `test-mcp/*` / `test-mcp/alpha` form) | McpToolAgentScoped, McpToolAgentScopedExplicit, McpToolAgentScopedExplicitSession |
+| [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861) | MCP server tools not exposed via session `AvailableTools` for any non-dashed-explicit form (namespaced `test-mcp/alpha`, dash wildcard `test-mcp-*`, or slash wildcard `test-mcp/*`) | McpToolExplicitNamespaced, McpToolSpecified, McpToolWildcard |
+
+> **2026-06-19:** Adopted the SDK team's namespaced-selector guidance and mapped
+> out where each selector form works. MCP tools are matched by their namespaced
+> name (`test-mcp/alpha`) or wildcard (`test-mcp/*`), which revealed a
+> **selector-format asymmetry** between the agent and session levels:
+> - **Agent level** (`CustomAgentConfig.Tools`) — the **slash** form works.
+>   Switching `McpToolAgentScoped` to `test-mcp/*` and
+>   `McpToolAgentScopedExplicit` / `McpToolAgentScopedExplicitSession` to
+>   `test-mcp/alpha` made all three **pass** (#860 effectively resolved).
+> - **Session level** (`SessionConfig.AvailableTools`) — only the **dashed
+>   explicit** form (`test-mcp-alpha`, ...) works (`McpToolExplicit`). Every
+>   other form fails (#861): namespaced explicit `test-mcp/alpha`
+>   (`McpToolExplicitNamespaced`), dash wildcard `test-mcp-*` (`McpToolSpecified`),
+>   and slash wildcard `test-mcp/*` (`McpToolWildcard`) — so no slash and no
+>   wildcard form works there. Each form is now a separate main-suite test so it
+>   can flip to **PASS** independently when fixed, while the `self_contained/`
+>   folder holds a single combined repro,
+>   [`McpSessionAvailableTools`](self_contained/McpSessionAvailableTools), that
+>   exercises all forms and exits non-zero while any still fails.
+> - The model always reports tools back in the dashed form (`test-mcp-alpha`),
+>   so response validation expects dashed names throughout.
+> - The SDK team acknowledged the dash-vs-slash inconsistency and is looking at
+>   making it easier.
 
 > **2026-06-17:** Tested with SDK `1.0.2` / required CLI `1.0.64-0`:
 > - **#859 (SessionConfig.Agent preselect) and agent post-select (`Rpc.Agent.SelectAsync`)** — Still passing. The CLI now injects an extra built-in `sql` tool (per-session SQLite for task tracking); once it is ignored alongside `skill`/`report_intent`, the agent `Tools = ["view"]` allow-list is correctly enforced.

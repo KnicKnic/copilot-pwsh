@@ -3,7 +3,7 @@
 // ============================================================================
 //
 // Attaches a local test MCP server and sets SessionConfig.AvailableTools to
-// the full prefixed tool names (test-mcp-alpha, test-mcp-beta, test-mcp-gamma).
+// the prefixed (dash) tool names (test-mcp-alpha, test-mcp-beta, test-mcp-gamma).
 // No agent is used. The CLI should expose exactly those MCP tools to the model.
 //
 // Run:  dotnet run -- McpToolExplicit

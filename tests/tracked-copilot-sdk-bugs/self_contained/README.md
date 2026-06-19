@@ -15,20 +15,30 @@ found in a parent folder), so a bare `dotnet run -c Release` is enough.
 
 | Scenario | Kind | What it shows |
 |----------|------|---------------|
-| [McpToolAgentScoped](McpToolAgentScoped) | Known bug | Agent `Tools = ["test-mcp"]` (bare server name) not expanded to MCP tools (#860). |
-| [McpToolAgentScopedExplicit](McpToolAgentScopedExplicit) | Known bug | Agent `Tools` with explicit prefixed MCP tool names not surfaced (#860 / #1019). |
-| [McpToolAgentScopedExplicitSession](McpToolAgentScopedExplicitSession) | Known bug | Explicit MCP tool names in agent scope **and** session `AvailableTools` still not surfaced. |
-| [McpToolSpecified](McpToolSpecified) | Known bug | `AvailableTools = ["test-mcp"]` (server name) does not expose MCP tools (#861). |
-| [McpToolWildcard](McpToolWildcard) | Known bug | `AvailableTools = ["test-mcp/*"]` (wildcard) does not expose MCP tools (#861). |
+| [McpSessionAvailableTools](McpSessionAvailableTools) | Known bug | A single repro that tries every session `AvailableTools` selector form against the same MCP server. Only the dashed-explicit form (`test-mcp-alpha`, ...) exposes the tools; the namespaced (`test-mcp/alpha`), dash-wildcard (`test-mcp-*`), and slash-wildcard (`test-mcp/*`) forms all fail (#861). |
 
 **Known bug** = continues to reproduce as already tracked.
 
-> The agent tool-scoping scenarios (`#859`) were removed: once the CLI-injected
-> `sql` built-in is ignored, agent `Tools` scoping is correctly enforced, so
-> those cases pass and are no longer bugs.
+> **Selector-format asymmetry (per SDK team feedback).** MCP tools are matched
+> by their namespaced name (`test-mcp/alpha`) or wildcard (`test-mcp/*`) at the
+> **agent** level (`CustomAgentConfig.Tools`), but session-level
+> `AvailableTools` only matches the **dashed explicit** names
+> (`test-mcp-alpha`) — no namespaced or wildcard form (`test-mcp/alpha`,
+> `test-mcp-*`, or `test-mcp/*`) works there. Adopting the slash form fixed all
+> agent-scoped scenarios (`McpToolAgentScoped`, `McpToolAgentScopedExplicit`,
+> `McpToolAgentScopedExplicitSession`), so they were removed from this folder.
+> The remaining repro shows that none of those forms work at the session level —
+> the inconsistency the SDK team acknowledged. It is consolidated into a single
+> program so the team can watch each form flip to "EXPOSED" as fixes land; the
+> parent suite keeps a separate test per form (`McpToolExplicitNamespaced`,
+> `McpToolSpecified`, `McpToolWildcard`).
+>
+> The earlier agent tool-scoping scenarios (`#859`) were likewise removed: once
+> the CLI-injected `sql` built-in is ignored, agent `Tools` scoping is correctly
+> enforced.
 
-All scenarios exit `1` when the bug reproduces, `0` if the behavior is fixed,
-and `2` on a setup error.
+The combined repro exits `1` while any session `AvailableTools` form still fails
+to expose the MCP tools, `0` once every form is fixed, and `2` on a setup error.
 
 ## Run one
 

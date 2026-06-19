@@ -1,9 +1,11 @@
 // ============================================================================
-// Test: MCP server with AvailableTools = ["test-mcp"] (bare server name)
+// Test: MCP server with session AvailableTools = ["test-mcp-*"] (dash wildcard)
 // ============================================================================
 //
 // Attaches a local test MCP server and sets SessionConfig.AvailableTools to
-// the bare server name. The CLI should expose the MCP tools to the model.
+// the dash-form wildcard (test-mcp-*). At the session level no wildcard form is
+// honored (neither test-mcp-* nor test-mcp/*) — only explicit dashed tool names
+// (test-mcp-alpha, ...) are matched — so the MCP tools are NOT exposed.
 //
 // Run:  dotnet run -- McpToolSpecified
 // ============================================================================
@@ -14,7 +16,7 @@ public class McpToolSpecified : IBugRepro
 {
     public bool ExpectsFail => true;
     public string Description =>
-        "MCP server with AvailableTools = [\"test-mcp\"]: tools should be exposed";
+        "MCP server with session AvailableTools = [\"test-mcp-*\"] (dash wildcard): tools NOT exposed";
 
     public async Task<int> RunAsync(string cliPath)
     {
@@ -28,7 +30,7 @@ public class McpToolSpecified : IBugRepro
 
         Console.WriteLine($"MCP server: {TestMcpServerHelper.McpServerName}");
         Console.WriteLine($"  Command: {mcpServer.Command} {string.Join(" ", mcpServer.Args!)}");
-        Console.WriteLine($"  AvailableTools: [\"{TestMcpServerHelper.McpServerName}\"]");
+        Console.WriteLine($"  AvailableTools: [\"{TestMcpServerHelper.DashWildcardSelector}\"]");
         Console.WriteLine();
 
         await using var client = new CopilotClient(new CopilotClientOptions { Connection = RuntimeConnection.ForStdio(path: cliPath) });
@@ -41,7 +43,7 @@ public class McpToolSpecified : IBugRepro
             {
                 [TestMcpServerHelper.McpServerName] = mcpServer
             },
-            AvailableTools = new List<string> { TestMcpServerHelper.McpServerName },
+            AvailableTools = new List<string> { TestMcpServerHelper.DashWildcardSelector },
             OnPermissionRequest = PermissionHandler.ApproveAll,
         };
 
