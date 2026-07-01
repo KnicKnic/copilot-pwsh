@@ -1,5 +1,5 @@
 using System.Management.Automation;
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 namespace CopilotShell;
 
@@ -14,7 +14,7 @@ namespace CopilotShell;
 /// <code>$session = New-CopilotSession $client -Agent "my-custom-agent"</code>
 /// <code>
 /// # Define and use a custom agent inline
-/// $agent = [GitHub.Copilot.SDK.CustomAgentConfig]@{ Name = 'reviewer'; Prompt = 'You are a code reviewer.'; Description = 'Reviews code changes' }
+/// $agent = [GitHub.Copilot.CustomAgentConfig]@{ Name = 'reviewer'; Prompt = 'You are a code reviewer.'; Description = 'Reviews code changes' }
 /// $session = New-CopilotSession $client -CustomAgents $agent -Agent reviewer
 /// </code>
 /// <code>
@@ -36,7 +36,8 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
     [Parameter(HelpMessage = "Model to use (e.g. gpt-5, claude-sonnet-4.5).")]
     public string? Model { get; set; }
 
-    [Parameter(HelpMessage = "Reasoning effort: low, medium, high, xhigh.")]
+    [Parameter(HelpMessage = "Reasoning effort: low, medium, high, xhigh. The model must support reasoning effort; otherwise session creation fails.")]
+    [ArgumentCompletions("low", "medium", "high", "xhigh")]
     public string? ReasoningEffort { get; set; }
 
     [Parameter(HelpMessage = "Enable streaming of response chunks.")]
@@ -51,8 +52,19 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
     [Parameter(HelpMessage = "List of tool names to allow.")]
     public string[]? AvailableTools { get; set; }
 
+    [Parameter(HelpMessage = "When no agent is specified, restrict the (built-in) default agent to an isolated builtin tool set: BuiltInTools.Isolated minus exit_plan_mode and ask_user (send_inbox and context_board are kept). Ignored if an agent is specified.")]
+    public SwitchParameter IsolatedDefaultAgent { get; set; }
+
     [Parameter(HelpMessage = "List of tool names to exclude.")]
     public string[]? ExcludedTools { get; set; }
+
+    [Parameter(HelpMessage = "One or more directories to discover skills from. Passing any directory enables skills for the session.")]
+    [Alias("SkillDirectories")]
+    public string[]? SkillDirectory { get; set; }
+
+    [Parameter(HelpMessage = "Names of skills to disable for the session.")]
+    [Alias("DisabledSkills")]
+    public string[]? DisabledSkill { get; set; }
 
     [Parameter(HelpMessage = "Enable infinite sessions (automatic context compaction).")]
     public SwitchParameter InfiniteSessions { get; set; }
@@ -69,7 +81,7 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
     [Parameter(HelpMessage = "Name of a custom agent to select for this session (e.g. 'my-agent'). The agent must be available in the Copilot runtime or defined via -CustomAgents.")]
     public string? Agent { get; set; }
 
-    [Parameter(HelpMessage = "One or more CustomAgentConfig objects to register with the session. Use [GitHub.Copilot.SDK.CustomAgentConfig]@{ Name='...'; Prompt='...' } to create them.")]
+    [Parameter(HelpMessage = "One or more CustomAgentConfig objects to register with the session. Use [GitHub.Copilot.CustomAgentConfig]@{ Name='...'; Prompt='...' } to create them.")]
     public CustomAgentConfig[]? CustomAgents { get; set; }
 
     [Parameter(HelpMessage = "Path(s) to .agent.md files that define custom agents. The agent name is derived from the filename (e.g. 'ado-team.agent.md' → 'ado-team').")]
@@ -102,7 +114,10 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
             CustomAgents = CustomAgents,
             CustomAgentFiles = CustomAgentFile,
             AvailableTools = AvailableTools,
+            IsolatedDefaultAgent = IsolatedDefaultAgent.IsPresent,
             ExcludedTools = ExcludedTools,
+            SkillDirectories = SkillDirectory,
+            DisabledSkills = DisabledSkill,
             McpConfigFile = McpConfigFile,
             NoMcpWrapper = NoMcpWrapper.IsPresent,
             Agent = Agent,
@@ -157,7 +172,7 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
 
         try
         {
-            SessionDataStore.WriteCreationDefaults(config.ConfigDir, session.SessionId);
+            SessionDataStore.WriteCreationDefaults(config.ConfigDirectory, session.SessionId);
             WriteVerbose("Session sidecar created with creation defaults.");
         }
         catch (Exception ex)
@@ -231,44 +246,45 @@ public sealed class ResumeCopilotSessionCommand : AsyncPSCmdlet
     [Alias("AgentFile")]
     public string[]? CustomAgentFile { get; set; }
 
+    [Parameter(HelpMessage = "One or more directories to discover skills from. Passing any directory enables skills for the resumed session.")]
+    [Alias("SkillDirectories")]
+    public string[]? SkillDirectory { get; set; }
+
+    [Parameter(HelpMessage = "Names of skills to disable for the resumed session.")]
+    [Alias("DisabledSkills")]
+    public string[]? DisabledSkill { get; set; }
+
     protected override async Task ProcessRecordAsync()
     {
         var config = new ResumeSessionConfig();
         config.OnPermissionRequest = PermissionHandler.ApproveAll;
 
-        if (CustomAgents is not null || CustomAgentFile is not null)
+        var setupResult = SessionSetupHelper.ConfigureResume(config, new SessionSetupOptions
         {
-            var allAgents = new List<CustomAgentConfig>();
-            if (CustomAgents is not null)
-                allAgents.AddRange(CustomAgents);
-            if (CustomAgentFile is not null)
-            {
-                foreach (var file in CustomAgentFile)
-                {
-                    var resolvedPath = ResolvePSPath(file);
-                    var parsed = AgentFileParser.Parse(resolvedPath);
-                    allAgents.Add(parsed);
-                    WriteVerbose($"Loaded agent '{parsed.Name}' from {Path.GetFileName(resolvedPath)}");
-                }
-            }
-            config.CustomAgents = allAgents;
-            WriteVerbose($"Registered {allAgents.Count} custom agent(s): {string.Join(", ", allAgents.Select(a => a.Name))}");
-        }
+            CustomAgents = CustomAgents,
+            CustomAgentFiles = CustomAgentFile,
+            SkillDirectories = SkillDirectory,
+            DisabledSkills = DisabledSkill,
+            Agent = Agent,
+            ResolvePath = ResolvePSPath,
+            WriteVerbose = WriteVerbose,
+            WriteWarning = WriteWarning
+        });
 
-        var session = await Client.ResumeSessionAsync(SessionId, config);
+        WriteVerbose("Calling ResumeSessionAsync...");
+        // Run ResumeSessionAsync off our PipelineSyncContext (same reasoning as
+        // New-CopilotSession's CreateSessionAsync): the SDK's internal JSON-RPC reader
+        // threads must not capture this cmdlet's message-pump SyncContext. If they did,
+        // every session event would be silently swallowed once this cmdlet returns and
+        // the pump's BlockingCollection is disposed — making Send-CopilotMessage time out
+        // forever on the resumed session. Task.Run forces a clean ThreadPool thread.
+        var session = await Task.Run(() => Client.ResumeSessionAsync(SessionId, config));
 
-        // Select agent after resume if specified
-        // If a single custom agent was loaded and -Agent was not specified, auto-select it
-        var agentToSelect = Agent;
-        if (agentToSelect is null && config.CustomAgents?.Count == 1)
+        // Resume selects the agent AFTER the session is resumed (the config does not pre-set it).
+        if (setupResult.AgentToSelect is not null)
         {
-            agentToSelect = config.CustomAgents[0].Name;
-            WriteVerbose($"Auto-selecting sole custom agent: {agentToSelect}");
-        }
-        if (agentToSelect is not null)
-        {
-            WriteVerbose($"Selecting agent: {agentToSelect}");
-            await session.Rpc.Agent.SelectAsync(agentToSelect);
+            WriteVerbose($"Selecting agent: {setupResult.AgentToSelect}");
+            await session.Rpc.Agent.SelectAsync(setupResult.AgentToSelect);
         }
 
         WriteObject(session);
@@ -359,7 +375,7 @@ public sealed class GetCopilotSessionMessagesCommand : AsyncPSCmdlet
 
     protected override async Task ProcessRecordAsync()
     {
-        var messages = await Session.GetMessagesAsync();
+        var messages = await Session.GetEventsAsync(CancellationToken.None);
         foreach (var msg in messages)
             WriteObject(msg);
     }

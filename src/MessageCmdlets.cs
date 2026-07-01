@@ -1,5 +1,5 @@
 using System.Management.Automation;
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 namespace CopilotShell;
 
@@ -33,6 +33,9 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
 
     [Parameter(HelpMessage = "Path to a .prompt.md file (VS Code compatible). Contains frontmatter with optional 'agent' and 'description' fields, and a body used as the prompt text. Explicit -Prompt and -Agent override values from the file.")]
     public string? PromptFile { get; set; }
+
+    [Parameter(HelpMessage = "Text to prepend to the prompt. Inserted before the -Prompt or -PromptFile body (separated by a newline). If no other prompt is provided, this becomes the entire prompt.")]
+    public string? PrependPrompt { get; set; }
 
     [Parameter(HelpMessage = "File paths to attach.")]
     [Alias("Attachments")]
@@ -119,10 +122,19 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
 
         // Resolve effective prompt: explicit -Prompt overrides prompt file body
         var effectivePrompt = Prompt ?? promptFileResult?.Prompt;
+
+        // Prepend text if provided (or use as the entire prompt when nothing else is given)
+        if (!string.IsNullOrEmpty(PrependPrompt))
+        {
+            effectivePrompt = string.IsNullOrEmpty(effectivePrompt)
+                ? PrependPrompt
+                : PrependPrompt + "\n" + effectivePrompt;
+        }
+
         if (string.IsNullOrEmpty(effectivePrompt))
         {
             ThrowTerminatingError(new ErrorRecord(
-                new PSArgumentException("Either -Prompt or -PromptFile (with prompt body) must be specified."),
+                new PSArgumentException("Either -Prompt, -PromptFile (with prompt body), or -PrependPrompt must be specified."),
                 "MissingPrompt", ErrorCategory.InvalidArgument, null));
             return;
         }
@@ -151,10 +163,10 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
 
         if (Attachment is not null)
         {
-            var attachments = new List<UserMessageAttachment>();
+            var attachments = new List<Attachment>();
             foreach (var path in Attachment)
             {
-                attachments.Add(new UserMessageAttachmentFile
+                attachments.Add(new AttachmentFile
                 {
                     Path = path,
                     DisplayName = System.IO.Path.GetFileName(path)
@@ -182,7 +194,7 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
                 sub?.Dispose();
             });
             
-            sub = Session.On(evt =>
+            sub = Session.On<SessionEvent>(evt =>
             {
                 receivedFirstEvent = true;
 
@@ -275,7 +287,7 @@ public sealed class SendCopilotMessageCommand : AsyncPSCmdlet
                     done.TrySetCanceled(cancellationToken);
                 });
 
-                using var sub = Session.On(evt =>
+                using var sub = Session.On<SessionEvent>(evt =>
                 {
                     switch (evt)
                     {
@@ -371,7 +383,7 @@ public sealed class WaitCopilotSessionCommand : AsyncPSCmdlet
     {
         var done = new TaskCompletionSource();
 
-        using var sub = Session.On(evt =>
+        using var sub = Session.On<SessionEvent>(evt =>
         {
             if (evt is SessionIdleEvent)
                 done.TrySetResult();

@@ -1,6 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 namespace CopilotShell;
 
@@ -115,7 +115,7 @@ internal static class McpConfigLoader
         {
             var cwdStr = cwd.GetString();
             if (cwdStr is not null)
-                config.Cwd = cwdStr;
+                config.WorkingDirectory = cwdStr;
         }
 
         if (entry.TryGetProperty("tools", out var tools))

@@ -539,8 +539,8 @@ PowerShell Process (pwsh 7.4+ / .NET 8)
 │  │ AsyncPSCmdlet        │          │ + 20 other dependencies  │  │
 │  │ InvokeCopilotCommand │          └──────────────────────────┘  │
 │  │ SessionCmdlets       │                                        │
-│  │ McpToolDiscovery     │          ┌──────────────────────────┐  │
-│  │ ToolFilterHelper     │          │ copilot.exe              │  │
+│  │ SessionSetupHelper   │          ┌──────────────────────────┐  │
+│  │ McpConfigLoader      │          │ copilot.exe              │  │
 │  │ McpWrapperHelper     │──stdio──▶│ (child process)          │  │
 │  │ AgentFileParser      │          │ JSON-RPC 2.0             │  │
 │  └─────────────────────┘          └──────────┬───────────────┘  │

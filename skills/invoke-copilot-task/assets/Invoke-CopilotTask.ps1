@@ -199,14 +199,7 @@ if ($PromptFile) {
 if ($Agent) {
     $agentArgs = @("-agent", $Agent)
 }
-# Prepend string to prompt if provided (or use as entire prompt if no PromptFile)
-if ($PrependPrompt) {
-    if ($prompt) {
-        $prompt = "$PrependPrompt`n" + $prompt
-    } else {
-        $prompt = $PrependPrompt
-    }
-}
+# Note: prepending is delegated to Send-CopilotMessage via its -PrependPrompt parameter.
 # Resolve agent files: from -AgentFiles parameter + frontmatter name-based lookup
 $resolvedAgentFiles = @()
 foreach ($af in $AgentFile) {
@@ -234,8 +227,8 @@ if ($agentArgs.Count -gt 1 -and $resolvedAgentFiles.Count -eq 0) {
     throw "Agent '$($agentArgs[1])' was specified but no agent file could be resolved. Provide -AgentFile or ensure .github/agents/$($agentArgs[1]).agent.md exists."
 }
 
-# Validate we have a prompt
-if (-not $prompt) {
+# Validate we have a prompt (body from -PromptFile and/or -PrependPrompt)
+if (-not $prompt -and -not $PrependPrompt) {
     throw "No prompt provided. Specify either -PrependPrompt or -PromptFile."
 }
 #endregion
@@ -276,7 +269,7 @@ if (-not (Test-Path -LiteralPath $runDetailsDir)) {
 #endregion
 
 #region Pre-Run Artifacts
-# Save prompt to run_details folder
+# Save prompt body to run_details folder (prepend is applied by Send-CopilotMessage; recorded as prependPrompt in run details)
 $prompt | Set-Content -LiteralPath "$runDetailsDir/prompt.txt"
 
 # Copy mcp-config.json to run_details folder if it exists
@@ -323,6 +316,7 @@ $prerunDetails = @{
     timestamp = (Get-Date).ToString("o")
     promptName = $promptName
     promptFile = $PromptFile
+    prependPrompt = $PrependPrompt
     agent = if ($agentArgs.Count -gt 1) { $agentArgs[1] } else { $null }
     agentFiles = $resolvedAgentFiles
     sessionId = $sessionIdPlaceholder
@@ -375,7 +369,21 @@ try{
         
         try{
     try {
-        Send-CopilotMessage $session -MaxTurns $MaxTurns -prompt $prompt -timeout $(30*60) -stream | Format-CopilotEvent -LogFile "$runDetailsDir/pwsh_capture.md" | Out-Null
+        # Pass the prompt file directly to the cmdlet when present (it parses the body);
+        # otherwise fall back to the inline prompt. Agent resolution above still parses
+        # the prompt file's frontmatter so the agent file can be wired into the session.
+        $mainPromptArg = @{}
+        if ($PromptFile) {
+            $mainPromptArg["PromptFile"] = $PromptFile
+        } elseif ($prompt) {
+            $mainPromptArg["Prompt"] = $prompt
+        }
+        # Keep the resolved agent authoritative so a prompt file's frontmatter agent
+        # doesn't override an explicit -Agent / resolved selection.
+        if ($agentArgs.Count -gt 1) {
+            $mainPromptArg["Agent"] = $agentArgs[1]
+        }
+        Send-CopilotMessage $session -MaxTurns $MaxTurns @mainPromptArg -PrependPrompt $PrependPrompt -timeout $(30*60) -stream | Format-CopilotEvent -LogFile "$runDetailsDir/pwsh_capture.md" | Out-Null
     } catch {
         throw "Send-CopilotMessage (main prompt) failed: $_"
     }
@@ -446,6 +454,7 @@ $runDetails = @{
     timestamp = $startTime.ToString("o")
     promptName = $promptName
     promptFile = $PromptFile
+    prependPrompt = $PrependPrompt
     agent = if ($agentArgs.Count -gt 1) { $agentArgs[1] } else { $null }
     agentFiles = $resolvedAgentFiles
     sessionId = if ($sessionId) { $sessionId } else { $sessionIdPlaceholder }

@@ -44,6 +44,9 @@ dotnet run -- --list
 | **McpToolAgentScoped** | No | Agent with `Tools = ["test-mcp/*"]` (wildcard) selected via `Rpc.Agent.SelectAsync` — MCP tools correctly exposed through the agent's tool scope. |
 | **McpToolAgentScopedExplicit** | No | Agent with explicit namespaced tool names (`test-mcp/alpha`, ...) — MCP tools correctly exposed. |
 | **McpToolAgentScopedExplicitSession** | No | Agent with namespaced tool names (`test-mcp/alpha`, ...) + session `AvailableTools` with dashed names — MCP tools correctly exposed. |
+| **McpToolAgentScopedSlashVsDash** | Yes | Agent `Tools = ["test-mcp/alpha"]` (slash) vs `["test-mcp-alpha"]` (dash) for a single MCP tool — only the **slash** form is matched at the agent level; the dash form is not. Confirms agent MCP selectors must use `<server>/tool` (or `<server>/*`). |
+| **UnrestrictedToolsTwoMcp** | No | Two MCP servers (`mcp1`, `mcp2`), no agent/`AvailableTools` restriction — control test confirming an unrestricted session sees tools from **both** servers. |
+| **AgentScopedDefaultMcpTwoMcp** | No | Two MCP servers (`mcp1`, `mcp2`) with a default agent (`SessionConfig.Agent`) scoped to `mcp1/*` (+ `task`) — agent sees `mcp1` tools but **not** `mcp2` tools (other server hidden by scope). |
 
 ## Tracked Issues
 

@@ -2,7 +2,7 @@ using System.Management.Automation;
 using System.Collections;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 namespace CopilotShell;
 
@@ -18,7 +18,7 @@ namespace CopilotShell;
 /// <code>Invoke-Copilot "Help me" -Agent my-custom-agent</code>
 /// <code>
 /// # Define a custom agent and use it in one shot
-/// $agent = [GitHub.Copilot.SDK.CustomAgentConfig]@{ Name = 'reviewer'; Prompt = 'You are a code reviewer.' }
+/// $agent = [GitHub.Copilot.CustomAgentConfig]@{ Name = 'reviewer'; Prompt = 'You are a code reviewer.' }
 /// Invoke-Copilot "Review this PR" -CustomAgents $agent -Agent reviewer
 /// </code>
 /// <code>
@@ -44,6 +44,10 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
 
     [Parameter(HelpMessage = "Model to use (e.g. gpt-5, claude-sonnet-4.5).")]
     public string? Model { get; set; }
+
+    [Parameter(HelpMessage = "Reasoning effort: low, medium, high, xhigh. The model must support reasoning effort; otherwise session creation fails.")]
+    [ArgumentCompletions("low", "medium", "high", "xhigh")]
+    public string? ReasoningEffort { get; set; }
 
     [Parameter(HelpMessage = "System message content.")]
     public string? SystemMessage { get; set; }
@@ -72,8 +76,19 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
     [Parameter(HelpMessage = "List of tool names to allow.")]
     public string[]? AvailableTools { get; set; }
 
+    [Parameter(HelpMessage = "When no agent is specified, restrict the (built-in) default agent to an isolated builtin tool set: BuiltInTools.Isolated minus exit_plan_mode and ask_user (send_inbox and context_board are kept). Ignored if an agent is specified.")]
+    public SwitchParameter IsolatedDefaultAgent { get; set; }
+
     [Parameter(HelpMessage = "List of tool names to exclude.")]
     public string[]? ExcludedTools { get; set; }
+
+    [Parameter(HelpMessage = "One or more directories to discover skills from. Passing any directory enables skills for the session.")]
+    [Alias("SkillDirectories")]
+    public string[]? SkillDirectory { get; set; }
+
+    [Parameter(HelpMessage = "Names of skills to disable for the session.")]
+    [Alias("DisabledSkills")]
+    public string[]? DisabledSkill { get; set; }
 
     [Parameter(HelpMessage = "Path to an MCP config JSON file (e.g. mcp-config.json) that defines MCP servers to attach to this session.")]
     public string? McpConfigFile { get; set; }
@@ -84,7 +99,7 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
     [Parameter(HelpMessage = "Name of a custom agent to select for this session (e.g. 'my-agent').")]
     public string? Agent { get; set; }
 
-    [Parameter(HelpMessage = "One or more CustomAgentConfig objects to register with the session. Use [GitHub.Copilot.SDK.CustomAgentConfig]@{ Name='...'; Prompt='...' } to create them.")]
+    [Parameter(HelpMessage = "One or more CustomAgentConfig objects to register with the session. Use [GitHub.Copilot.CustomAgentConfig]@{ Name='...'; Prompt='...' } to create them.")]
     public CustomAgentConfig[]? CustomAgents { get; set; }
 
     [Parameter(HelpMessage = "Path(s) to .agent.md files that define custom agents. The agent name is derived from the filename (e.g. 'ado-team.agent.md' → 'ado-team').")]
@@ -93,6 +108,9 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
 
     [Parameter(HelpMessage = "Path to a .prompt.md file (VS Code compatible). Contains frontmatter with optional 'agent' and 'description' fields, and a body used as the prompt text. Explicit -Prompt and -Agent override values from the file.")]
     public string? PromptFile { get; set; }
+
+    [Parameter(HelpMessage = "Text to prepend to the prompt. Inserted before the -Prompt or -PromptFile body (separated by a newline). If no other prompt is provided, this becomes the entire prompt.")]
+    public string? PrependPrompt { get; set; }
 
     private CancellationTokenSource? _cts;
 
@@ -137,24 +155,33 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
 
         // Resolve effective prompt: explicit -Prompt overrides prompt file body
         var effectivePrompt = Prompt ?? promptFileResult?.Prompt;
+
+        // Prepend text if provided (or use as the entire prompt when nothing else is given)
+        if (!string.IsNullOrEmpty(PrependPrompt))
+        {
+            effectivePrompt = string.IsNullOrEmpty(effectivePrompt)
+                ? PrependPrompt
+                : PrependPrompt + "\n" + effectivePrompt;
+        }
+
         if (string.IsNullOrEmpty(effectivePrompt))
         {
             ThrowTerminatingError(new ErrorRecord(
-                new PSArgumentException("Either -Prompt or -PromptFile (with prompt body) must be specified."),
+                new PSArgumentException("Either -Prompt, -PromptFile (with prompt body), or -PrependPrompt must be specified."),
                 "MissingPrompt", ErrorCategory.InvalidArgument, null));
             return;
         }
 
         // --- Client ---
         var clientOpts = new CopilotClientOptions();
-        if (CliPath is not null)
-            clientOpts.CliPath = CliPath;
-        else
+        string? cliPath = CliPath;
+        if (cliPath is null)
         {
             var resolved = await CliPathResolver.ResolveOrDownloadAsync(
                 msg => WriteVerbose(msg), cancellationToken);
-            if (resolved is not null) clientOpts.CliPath = resolved;
+            if (resolved is not null) cliPath = resolved;
         }
+        clientOpts.Connection = RuntimeConnection.ForStdio(cliPath!);
         if (GitHubToken is not null) clientOpts.GitHubToken = GitHubToken;
 
         await using var client = new CopilotClient(clientOpts);
@@ -167,6 +194,7 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
         };
 
         if (Model is not null) sessionConfig.Model = Model;
+        if (ReasoningEffort is not null) sessionConfig.ReasoningEffort = ReasoningEffort;
 
         if (SystemMessage is not null)
         {
@@ -185,7 +213,10 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
             CustomAgents = CustomAgents,
             CustomAgentFiles = CustomAgentFile,
             AvailableTools = AvailableTools,
+            IsolatedDefaultAgent = IsolatedDefaultAgent.IsPresent,
             ExcludedTools = ExcludedTools,
+            SkillDirectories = SkillDirectory,
+            DisabledSkills = DisabledSkill,
             McpConfigFile = McpConfigFile,
             NoMcpWrapper = NoMcpWrapper.IsPresent,
             Agent = Agent,
@@ -202,7 +233,7 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
 
         try
         {
-            SessionDataStore.WriteCreationDefaults(sessionConfig.ConfigDir, session.SessionId);
+            SessionDataStore.WriteCreationDefaults(sessionConfig.ConfigDirectory, session.SessionId);
             WriteVerbose("Session sidecar created with creation defaults.");
         }
         catch (Exception ex)
@@ -215,10 +246,10 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
 
         if (Attachment is not null)
         {
-            var attachments = new List<UserMessageAttachment>();
+            var attachments = new List<Attachment>();
             foreach (var path in Attachment)
             {
-                attachments.Add(new UserMessageAttachmentFile
+                attachments.Add(new AttachmentFile
                 {
                     Path = path,
                     DisplayName = System.IO.Path.GetFileName(path)
@@ -235,7 +266,7 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
         // Capture the SynchronizationContext to marshal WriteObject calls back to the pipeline thread
         var syncContext = SynchronizationContext.Current;
 
-        using var sub = session.On(evt =>
+        using var sub = session.On<SessionEvent>(evt =>
         {
             if (Stream.IsPresent)
             {

@@ -21,8 +21,7 @@ PowerShell 7+ binary module (C#) wrapping the GitHub Copilot SDK for .NET. Targe
 - **LoginCmdlet.cs** — `Connect-Copilot`. Resolves/downloads the correct CLI version and runs `copilot login` interactively for OAuth device flow authentication. Supports `-GitHubHost` for GHE.
 - **CliPathResolver.cs** — Resolves `runtimes/<rid>/native/copilot[.exe]` relative to the assembly location.
 - **McpConfigLoader.cs** — Parses MCP JSON config files into SDK `McpStdioServerConfig`/`McpHttpServerConfig` objects. Defaults `Tools=["*"]`. Skips `"disabled": true` entries.
-- **ToolFilterHelper.cs** — Manages tool filtering with dynamic MCP tool discovery. When `-AvailableTools` is specified, core CLI tools are always included. Wildcard patterns (`ado-*`) and bare server names (`ado`) are expanded against dynamically discovered MCP tools via `McpToolDiscovery`. MCP servers not referenced in `-AvailableTools` are excluded from the session.
-- **McpToolDiscovery.cs** — Discovers MCP server tools at runtime via the `tools/list` JSON-RPC protocol over stdio. Starts the server process, performs the MCP handshake, collects tool names, and kills the process.
+- **SessionSetupHelper.cs** — Wires custom agents, MCP servers, and tool filters onto a `SessionConfig`. Intentionally minimal: MCP servers (when a config file is given) are always attached to the session as-is (optionally wrapped), never filtered and never attached to individual agents; the session `AvailableTools` filter is only set when `-AvailableTools` is passed (otherwise the session inherits all tools); agent `Tools` lists are passed through verbatim (e.g. `<server>/*`) with no wildcard expansion or MCP tool discovery; an agent is pre-selected only when explicitly requested (via `-Agent` or a prompt file) — a sole custom agent is never auto-selected.
 - **McpWrapperHelper.cs** — Wraps ALL local MCP server configs to use `mcp-wrapper`. The wrapper internally decides zombie vs direct mode via regex matching. Applied by default; disabled with `-NoMcpWrapper`.
 - **mcp-wrapper/** — Separate .NET 8 console app. Combined MCP proxy with zombie daemon support:
   - **Direct mode**: Transparent stdin/stdout/stderr proxy that sets env vars and cwd before launching the MCP server. Used for servers that don't match zombie eligibility patterns.
@@ -34,11 +33,9 @@ PowerShell 7+ binary module (C#) wrapping the GitHub Copilot SDK for .NET. Targe
   - Runtime files: `%LOCALAPPDATA%\mcp-host\` (Windows) or `/tmp/mcp-host-$USER/` (Unix). Logs to `daemon.log`.
 
 ## Tool Filtering
-- When `-AvailableTools` is specified, 16 core Copilot CLI tools are always included automatically
-- Wildcard patterns (`ado-*`) and bare server names (`ado`) are expanded via dynamic MCP tool discovery (`tools/list` protocol)
-- **Forward slashes are always normalized to dashes**: `ado/*` → `ado-*`, `kusto-mcp/kusto_query` → `kusto-mcp-kusto_query`, etc.
-- Only MCP servers referenced by wildcard or bare name in `-AvailableTools` are attached to the session
-- The expanded tools and normalized patterns are passed to the SDK
+- **Session level** (`-AvailableTools`): only applied when explicitly passed; otherwise the session inherits all tools. The values are passed to the SDK verbatim (no expansion, no MCP discovery, no normalization). `-IsolatedDefaultAgent` (only when no agent is specified) restricts the session to the isolated builtin set (`GitHub.Copilot.BuiltInTools.Isolated`) **minus** `exit_plan_mode`/`ask_user` (keeping `send_inbox`/`context_board`), capping the built-in default agent to an orchestration-only tool set. A session-level restriction is a hard cap: it **cascades** to every agent/subagent (an agent can only narrow the session set, never widen it).
+- **Agent level** (`CustomAgentConfig.Tools` / `.agent.md` `tools:`): passed through verbatim by `SessionSetupHelper`. For `.agent.md` files, `AgentFileParser` first translates VS Code Copilot tool-group names (e.g. `read/readFile` → `view`, `search` → `grep`/`glob`) to their CLI equivalents; programmatic `CustomAgentConfig.Tools` are expected to already use CLI names. Scope an agent to an MCP server with the namespaced slash wildcard `<server>/*` (e.g. `ado/*`) or a single tool `<server>/tool` — the slash form is what matches at the agent level (the dashed `<server>-tool` form does **not**). No wildcards are expanded and no MCP `tools/list` discovery is performed.
+- **MCP servers**: when an MCP config file is supplied, every server in it is attached to the session (optionally wrapped via `mcp-wrapper`). Servers are never filtered by the tool list and are never attached to individual agents.
 
 ## Conventions
 - All cmdlets follow the `Verb-CopilotNoun` naming pattern and are registered in `CopilotShell.psd1`.

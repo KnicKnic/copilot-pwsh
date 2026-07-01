@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 namespace CopilotShell;
 
@@ -94,10 +94,10 @@ internal static class McpWrapperHelper
         }
 
         // Pass cwd as explicit --cwd arg for the same reason.
-        if (!string.IsNullOrEmpty(original.Cwd))
+        if (!string.IsNullOrEmpty(original.WorkingDirectory))
         {
             wrappedArgs.Add("--cwd");
-            wrappedArgs.Add(original.Cwd);
+            wrappedArgs.Add(original.WorkingDirectory);
         }
 
         // Separator between wrapper options and child command
@@ -118,7 +118,7 @@ internal static class McpWrapperHelper
             Command = wrapperPath,
             Args = wrappedArgs,
             Env = original.Env,   // SDK also sets these as process env vars (harmless duplication)
-            Cwd = original.Cwd,   // SDK also sets cwd on wrapper process
+            WorkingDirectory = original.WorkingDirectory,   // SDK also sets cwd on wrapper process
             Tools = original.Tools,
             Timeout = original.Timeout
         };

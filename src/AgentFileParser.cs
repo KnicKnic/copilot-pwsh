@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 namespace CopilotShell;
 
@@ -22,6 +22,32 @@ public static class AgentFileParser
     private static readonly Regex FrontmatterRegex = new(
         @"^---\s*\n(.*?)---\s*\n?",
         RegexOptions.Singleline | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Maps VS Code Copilot agent tool names (as written in <c>.agent.md</c> <c>tools:</c> lists)
+    /// to their Copilot CLI equivalents. Both the dash (<c>read-readFile</c>) and slash
+    /// (<c>read/readFile</c>) spellings are accepted. Entries not present here — including MCP
+    /// selectors such as <c>"&lt;server&gt;/*"</c> or <c>"&lt;server&gt;/tool"</c>, and plain CLI
+    /// tool names — are passed through verbatim.
+    /// </summary>
+    private static readonly Dictionary<string, string[]> VsCodeToolMappings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["vscode-vscodeAPI"] = new[] { "view", "create", "edit", "grep", "glob" },
+        ["vscode/vscodeAPI"] = new[] { "view", "create", "edit", "grep", "glob" },
+        ["execute-runTask"] = Array.Empty<string>(),
+        ["execute/runTask"] = Array.Empty<string>(),
+        ["execute-createAndRunTask"] = Array.Empty<string>(),
+        ["execute/createAndRunTask"] = Array.Empty<string>(),
+        ["execute-runInTerminal"] = new[] { "write_powershell", "read_powershell", "stop_powershell", "list_powershell" },
+        ["execute/runInTerminal"] = new[] { "write_powershell", "read_powershell", "stop_powershell", "list_powershell" },
+        ["read-readFile"] = new[] { "view" },
+        ["read/readFile"] = new[] { "view" },
+        ["web-fetch"] = new[] { "web_fetch" },
+        ["web/fetch"] = new[] { "web_fetch" },
+        ["search"] = new[] { "grep", "glob" },
+        ["edit"] = new[] { "edit", "create" },
+        ["agent"] = new[] { "task", "read_agent", "list_agents" },
+    };
 
     /// <summary>
     /// Parse an .agent.md file into a <see cref="CustomAgentConfig"/>.
@@ -147,7 +173,7 @@ public static class AgentFileParser
                         i++; // skip the continuation line
                     }
                 }
-                config.Tools = ParseToolsList(toolsValue);
+                config.Tools = TranslateTools(ParseToolsList(toolsValue));
             }
             else if (line.StartsWith("infer:", StringComparison.OrdinalIgnoreCase))
             {
@@ -170,6 +196,37 @@ public static class AgentFileParser
             val = val[1..^1];
         }
         return val;
+    }
+
+    /// <summary>
+    /// Translate a parsed <c>tools:</c> list from VS Code tool names to CLI equivalents.
+    /// Entries not present in <see cref="VsCodeToolMappings"/> (MCP selectors, plain CLI tool
+    /// names) are kept verbatim. Order is preserved and duplicates are removed.
+    ///
+    /// NOTE: built-in tools like "skill" (and "sql" / "report_intent") are intentionally NOT
+    /// added here. The Copilot CLI injects those automatically, so a scoped agent already has
+    /// them without listing them.
+    /// </summary>
+    private static List<string> TranslateTools(List<string> tools)
+    {
+        var translated = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var tool in tools)
+        {
+            if (VsCodeToolMappings.TryGetValue(tool, out var mapped))
+            {
+                foreach (var cliTool in mapped)
+                    if (seen.Add(cliTool))
+                        translated.Add(cliTool);
+            }
+            else if (seen.Add(tool))
+            {
+                translated.Add(tool);
+            }
+        }
+
+        return translated;
     }
 
     /// <summary>

@@ -142,6 +142,7 @@ $client = New-CopilotClient
 # Create session with custom system prompt
 $session = New-CopilotSession $client `
     -Model gpt-5 `
+    -ReasoningEffort high `
     -SystemMessage "You are a security auditor." `
     -SystemMessageMode Replace `
     -Stream
@@ -178,52 +179,54 @@ Invoke-Copilot "Refactor the entire codebase" `
 Invoke-Copilot "Explain this code" -Attachment ./main.cs, ./utils.cs
 ```
 
-### Tool filtering with dynamic MCP discovery
+### Tool filtering
 
-The Copilot CLI doesn't support wildcards in `-AvailableTools` — it needs exact tool names like `ado-wiki_get_page`. CopilotShell works around this by **dynamically querying MCP servers** for their tool lists using the MCP `tools/list` protocol.
+`-AvailableTools` restricts which tools a session can use. Names are passed to the
+Copilot CLI **verbatim** — there is no dynamic MCP discovery and no slash/dash
+normalization, so the selector format matters:
 
-When you pass a bare server name or wildcard pattern alongside `-McpConfigFile`, CopilotShell will:
-1. Start each referenced MCP server process temporarily
-2. Perform the MCP handshake (`initialize` → `initialized` → `tools/list`)
-3. Collect the exact tool names (e.g., `grafana-mcp-search_dashboards`)
-4. Expand your patterns against the discovered tools
-5. Kill the discovery process (the Copilot CLI starts its own instance for the actual session)
+- **Session level** (`-AvailableTools`): MCP tools must be listed with their **dashed
+  explicit** names (e.g. `ado-wiki_get_page`). Wildcards, bare server names, and the
+  slash form are **not** expanded at the session level.
+- **Agent level** (`CustomAgentConfig.Tools` / `.agent.md` `tools:`): scope an agent to an
+  MCP server with the namespaced **slash** form — `ado/*` (all tools) or `ado/wiki_get_page`
+  (one tool). The dashed form is **not** matched here.
+- **Built-in CLI tools** (`view`, `edit`, `grep`, ...): passed through as-is at either level.
 
-**Forward slashes are always normalized to dashes** — use whichever you prefer:
+A session-level restriction is a **hard cap**: it cascades to every agent (and any subagent
+spawned via `task`). An agent can only ever *narrow* the session's tool set, never widen it.
 
 ```powershell
-# Enable all ADO tools — discovered dynamically from the MCP server
-Invoke-Copilot "List my work items" `
-    -AvailableTools @('ado') `
-    -McpConfigFile ./mcp-config.json
-
-# Wildcard patterns work too
+# Restrict a session to specific MCP tools + a couple of builtins
 Invoke-Copilot "Search the wiki" `
-    -AvailableTools @('ado-wiki_*', 'powershell', 'view') `
+    -AvailableTools @('ado-wiki_get_page', 'ado-wiki_search', 'view') `
     -McpConfigFile ./mcp-config.json
 
-# Multiple servers
-Invoke-Copilot "Query the database and check dashboards" `
-    -AvailableTools @('kusto-mcp', 'grafana-mcp', 'powershell') `
+# Scope via an agent instead (slash form, wildcard supported)
+New-CopilotSession `
+    -CustomAgents ([GitHub.Copilot.CustomAgentConfig]@{ Name = 'ado-agent'; Tools = @('ado/*', 'task') }) `
+    -Agent ado-agent `
     -McpConfigFile ./mcp-config.json
-
-# Use -Verbose to see discovery results
-Invoke-Copilot "hello" `
-    -AvailableTools @('ado', 'kusto-mcp', 'grafana-mcp') `
-    -McpConfigFile ./mcp-config.json `
-    -Verbose
-# VERBOSE: Discovering tools from MCP servers: grafana-mcp, ado, kusto-mcp
-# VERBOSE:   grafana-mcp: 24 tools discovered
-# VERBOSE:   ado: 82 tools discovered
-# VERBOSE:   kusto-mcp: 17 tools discovered
 ```
 
-**Supported patterns:** (both `-` and `/` separators work)
-- `ado` or `ado-*` — bare server name or wildcard: all tools from that MCP server
-- `ado-wiki_*` — sub-wildcard: only tools matching the prefix
-- `kusto-mcp-kusto_query` — exact tool name: passed through as-is
-- `view`, `edit`, `grep` — built-in CLI tools: passed through as-is
-- `powershell` — shorthand: expands to `write_powershell`, `read_powershell`, `stop_powershell`, `list_powershell`
+#### Isolated default agent
+
+When no agent is specified, `-IsolatedDefaultAgent` restricts the session — and therefore the
+built-in default agent it caps — to an *isolated* builtin tool set:
+`GitHub.Copilot.BuiltInTools.Isolated` minus `exit_plan_mode` and `ask_user` (the interactive
+planning/prompting tools). `send_inbox` and `context_board` are **kept** so the agent can still
+participate in the inbox / dynamic-context-board machinery. The result is an
+orchestration-focused default (`task`, `read_agent`, `write_agent`, `list_agents`,
+`task_complete`, `send_inbox`, `context_board`, `skill`) with **no** file/shell/repo/MCP tools.
+
+```powershell
+# Default agent restricted to the isolated builtin tools
+Invoke-Copilot "Plan and delegate this work" -IsolatedDefaultAgent
+```
+
+The switch is **ignored when an agent is specified** (via `-Agent` or a prompt file) — in that
+case the agent's own `Tools` govern its scope. Because the restriction is applied at the session
+level, it is a hard cap that cascades to any subagents spawned via `task`.
 
 ### Resume a session
 
@@ -300,9 +303,8 @@ copilot-sdk/
     ├── LoginCmdlet.cs         # Connect-Copilot (authentication)
     ├── CliPathResolver.cs     # Auto-detect bundled copilot.exe
     ├── McpConfigLoader.cs     # Parse MCP JSON configs
-    ├── McpToolDiscovery.cs    # Dynamic MCP tool discovery via tools/list protocol
     ├── McpWrapperHelper.cs    # Wraps MCP configs to use mcp-wrapper
-    ├── ToolFilterHelper.cs    # Tool filtering with wildcard expansion
+    ├── SessionSetupHelper.cs  # Wire agents, MCP servers & tool filters onto a session
     └── Format-CopilotEvent.ps1 # Streaming event formatter (exported function)
 ```
 

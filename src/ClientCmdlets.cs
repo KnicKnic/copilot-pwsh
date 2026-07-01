@@ -1,5 +1,5 @@
 using System.Management.Automation;
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 namespace CopilotShell;
 
@@ -52,21 +52,30 @@ public sealed class NewCopilotClientCommand : AsyncPSCmdlet
         var opts = new CopilotClientOptions();
 
         // Auto-detect bundled CLI or download from npm if not explicitly provided
-        if (CliPath is null)
+        string? cliPath = CliPath;
+        if (cliPath is null)
         {
             var resolved = await CliPathResolver.ResolveOrDownloadAsync(
                 msg => WriteVerbose(msg));
-            if (resolved is not null) opts.CliPath = resolved;
+            if (resolved is not null) cliPath = resolved;
         }
 
-        if (CliPath is not null) opts.CliPath = CliPath;
-        if (CliArgs is not null) opts.CliArgs = CliArgs;
-        if (CliUrl is not null) opts.CliUrl = CliUrl;
-        if (Port != 0) opts.Port = Port;
-        if (UseStdio.IsPresent) opts.UseStdio = true;
-        if (LogLevel is not null) opts.LogLevel = LogLevel;
-        opts.AutoStart = AutoStart;
-        if (Cwd is not null) opts.Cwd = Cwd;
+        // Build the runtime connection based on the requested transport.
+        if (CliUrl is not null)
+        {
+            opts.Connection = RuntimeConnection.ForUri(CliUrl, null);
+        }
+        else if (Port != 0 && !UseStdio.IsPresent)
+        {
+            opts.Connection = RuntimeConnection.ForTcp(Port, null, cliPath, CliArgs);
+        }
+        else
+        {
+            opts.Connection = RuntimeConnection.ForStdio(cliPath!, CliArgs);
+        }
+
+        if (LogLevel is not null) opts.LogLevel = new CopilotLogLevel(LogLevel);
+        if (Cwd is not null) opts.WorkingDirectory = Cwd;
         if (GitHubToken is not null) opts.GitHubToken = GitHubToken;
         if (UseLoggedInUser.IsPresent) opts.UseLoggedInUser = true;
 
