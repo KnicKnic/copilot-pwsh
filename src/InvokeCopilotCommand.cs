@@ -15,11 +15,11 @@ namespace CopilotShell;
 /// <code>Invoke-Copilot "Explain this code" -Model claude-sonnet-4.5 -Stream</code>
 /// <code>Invoke-Copilot "You are a pirate" -SystemMessage "Respond like a pirate." -SystemMessageMode Replace</code>
 /// <code>Invoke-Copilot "Refactor this" -TimeoutSeconds 120 -MaxTurns 5</code>
-/// <code>Invoke-Copilot "Help me" -Agent my-custom-agent</code>
+/// <code>Invoke-Copilot "Help me" -DefaultAgent my-custom-agent</code>
 /// <code>
 /// # Define a custom agent and use it in one shot
 /// $agent = [GitHub.Copilot.CustomAgentConfig]@{ Name = 'reviewer'; Prompt = 'You are a code reviewer.' }
-/// Invoke-Copilot "Review this PR" -CustomAgents $agent -Agent reviewer
+/// Invoke-Copilot "Review this PR" -CustomAgents $agent -DefaultAgent reviewer
 /// </code>
 /// <code>
 /// # Load a custom agent from a .agent.md file
@@ -31,7 +31,7 @@ namespace CopilotShell;
 /// </code>
 /// <code>
 /// # Use a prompt file but override the agent
-/// Invoke-Copilot -PromptFile .github\prompts\get-work-items.prompt.md -Agent different-agent
+/// Invoke-Copilot -PromptFile .github\prompts\get-work-items.prompt.md -DefaultAgent different-agent
 /// </code>
 /// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "Copilot")]
@@ -90,14 +90,21 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
     [Alias("DisabledSkills")]
     public string[]? DisabledSkill { get; set; }
 
-    [Parameter(HelpMessage = "Path to an MCP config JSON file (e.g. mcp-config.json) that defines MCP servers to attach to this session.")]
-    public string? McpConfigFile { get; set; }
+    [Parameter(HelpMessage = "Path(s) to MCP config JSON files that define MCP servers to attach to this session. Files are loaded in order; duplicate server names keep the first definition.")]
+    [Alias("McpConfigFiles")]
+    public string[]? McpConfigFile { get; set; }
 
     [Parameter(HelpMessage = "Disable the MCP wrapper that fixes environment variable propagation. By default, local MCP servers are launched through mcp-wrapper to ensure env vars are set correctly.")]
     public SwitchParameter NoMcpWrapper { get; set; }
 
-    [Parameter(HelpMessage = "Name of a custom agent to select for this session (e.g. 'my-agent').")]
-    public string? Agent { get; set; }
+    [Parameter(HelpMessage = "Name of the default agent to select for this session (e.g. 'my-agent').")]
+    [ArgumentCompleter(typeof(CopilotAgentNameCompleter))]
+    public string? DefaultAgent { get; set; }
+
+    [Parameter(HelpMessage = "Agent names to load by searching -AgentFileFolders/default agent file folders. Does not select a default agent.")]
+    [Alias("Agents")]
+    [ArgumentCompleter(typeof(CopilotAgentNameCompleter))]
+    public string[]? Agent { get; set; }
 
     [Parameter(HelpMessage = "One or more CustomAgentConfig objects to register with the session. Use [GitHub.Copilot.CustomAgentConfig]@{ Name='...'; Prompt='...' } to create them.")]
     public CustomAgentConfig[]? CustomAgents { get; set; }
@@ -106,7 +113,11 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
     [Alias("AgentFile")]
     public string[]? CustomAgentFile { get; set; }
 
-    [Parameter(HelpMessage = "Path to a .prompt.md file (VS Code compatible). Contains frontmatter with optional 'agent' and 'description' fields, and a body used as the prompt text. Explicit -Prompt and -Agent override values from the file.")]
+    [Parameter(HelpMessage = "Ordered directories used to discover custom agents by name. Defaults to the repository .github/agents directory first, then ~/.copilot/agents.")]
+    [Alias("AgentFileFolder", "AgentPath", "AgentPaths")]
+    public string[]? AgentFileFolders { get; set; }
+
+    [Parameter(HelpMessage = "Path to a .prompt.md file (VS Code compatible). Contains frontmatter with optional 'agent' and 'description' fields, and a body used as the prompt text. Explicit -Prompt and -DefaultAgent override values from the file.")]
     public string? PromptFile { get; set; }
 
     [Parameter(HelpMessage = "Text to prepend to the prompt. Inserted before the -Prompt or -PromptFile body (separated by a newline). If no other prompt is provided, this becomes the entire prompt.")]
@@ -208,6 +219,11 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
         // Auto-approve tool permission requests using the SDK's built-in handler
         sessionConfig.OnPermissionRequest = PermissionHandler.ApproveAll;
 
+        var agentFileFoldersWereSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(AgentFileFolders));
+        var agentFileFolders = agentFileFoldersWereSpecified
+            ? AgentFileFolders
+            : AgentDiscovery.GetDefaultAgentFileFolders(ResolvePSPath(".")).ToArray();
+
         var setupResult = await SessionSetupHelper.ConfigureAsync(sessionConfig, new SessionSetupOptions
         {
             CustomAgents = CustomAgents,
@@ -217,10 +233,13 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
             ExcludedTools = ExcludedTools,
             SkillDirectories = SkillDirectory,
             DisabledSkills = DisabledSkill,
-            McpConfigFile = McpConfigFile,
+            McpConfigFiles = McpConfigFile,
             NoMcpWrapper = NoMcpWrapper.IsPresent,
-            Agent = Agent,
-            AgentWasSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(Agent)),
+            AgentNames = Agent,
+            DefaultAgent = DefaultAgent,
+            DefaultAgentWasSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(DefaultAgent)),
+            AgentFileFolders = agentFileFolders,
+            AgentFileFoldersWereSpecified = agentFileFoldersWereSpecified,
             PromptFileAgent = promptFileResult?.Agent,
             ResolvePath = ResolvePSPath,
             WriteVerbose = WriteVerbose,

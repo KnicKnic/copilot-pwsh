@@ -9,7 +9,8 @@ Each Invoke-CopilotTask run creates a directory under `.copilot_runs/<Name>/` wi
   "timestamp": "2026-04-24T10:30:00.0000000-07:00",
   "promptName": "ci-failure",
   "promptFile": "skills/invoke-copilot-task/assets/ci-failure.prompt.md",
-  "agent": "code-review",
+  "defaultAgent": "code-review",
+  "agents": ["investigator", "summarizer"],
   "agentFiles": ["C:\\code\\my-repo\\.github\\agents\\code-review.agent.md"],
   "sessionId": "a1b2c3d4-...",
   "name": "ci/12345",
@@ -17,7 +18,7 @@ Each Invoke-CopilotTask run creates a directory under `.copilot_runs/<Name>/` wi
   "version": "0",
   "systemMessage": "...",
   "workingDirectory": "C:\\code\\my-repo",
-  "mcpConfigPath": "C:\\code\\my-repo\\mcp-config.json",
+  "mcpConfigPaths": ["C:\\code\\my-repo\\.mcp.json", "C:\\code\\my-repo\\.copilot\\mcp-config.json"],
   "gitBranch": "main",
   "gitCommit": "abc1234def5678...",
   "success": true,
@@ -39,6 +40,9 @@ Each Invoke-CopilotTask run creates a directory under `.copilot_runs/<Name>/` wi
 | `name` | string | Run name (matches the directory path) |
 | `timestamp` | string | ISO 8601 start time |
 | `model` | string | Model used |
+| `defaultAgent` | string | Default agent selected for the run, if any |
+| `agents` | string[] | Named agents loaded without selecting a default |
+| `mcpConfigPaths` | string[] | MCP config files used, in load order |
 | `gitBranch` | string | Branch at time of run (null if not a git repo) |
 | `gitCommit` | string | Full commit hash (null if not a git repo) |
 | `displayFiles` | string[] | Output files the run was expected to produce |

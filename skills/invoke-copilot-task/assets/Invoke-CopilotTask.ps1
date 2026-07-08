@@ -16,9 +16,6 @@ param(
     [string]$Name = "",
 
     [Parameter(Mandatory=$false)]
-    [switch]$SkipMcpConfig,
-
-    [Parameter(Mandatory=$false)]
     [switch]$RunOnce,
 
     [Parameter(Mandatory=$false)]
@@ -28,7 +25,8 @@ param(
     [int]$MaxTurns = 0,
 
     [Parameter(Mandatory=$false)]
-    [string]$McpConfigSource = ".vscode/mcp.json",
+    [Alias("McpConfigFiles", "McpConfigSource")]
+    [string[]]$McpConfigFile = @(".mcp.json", "~/.copilot/mcp-config.json"),
 
     [Parameter(Mandatory=$false)]
     [ArgumentCompleter({
@@ -40,7 +38,13 @@ param(
     [string[]]$AgentFile = @(),
 
     [Parameter(Mandatory=$false)]
-    [string]$Agent = "",
+    [Alias("Agents")]
+    [ArgumentCompleter([CopilotShell.CopilotAgentNameCompleter])]
+    [string[]]$Agent = @(),
+
+    [Parameter(Mandatory=$false)]
+    [ArgumentCompleter([CopilotShell.CopilotAgentNameCompleter])]
+    [string]$DefaultAgent = "",
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("claude-sonnet-4.5","claude-sonnet-4.6", "claude-haiku-4.5", "claude-opus-4.5", "claude-opus-4.6", "claude-sonnet-4", 
@@ -84,151 +88,24 @@ if ([System.IO.Directory]::GetCurrentDirectory() -ne (Get-Location).Path) {
 }
 #endregion
 
-#region MCP Config Generation
+#region MCP Config Resolution
 $workspaceRoot = (Get-Location).Path
-$resolvedMcpConfigSource = if ([System.IO.Path]::IsPathRooted($McpConfigSource)) { $McpConfigSource } else { Join-Path $workspaceRoot $McpConfigSource }
-if (-not $SkipMcpConfig) {
-    $mcpConfigDest = Join-Path $workspaceRoot "mcp-config.json"
-    
-    if (Test-Path $resolvedMcpConfigSource) {
-        try {
-            $sourceConfig = Get-Content $resolvedMcpConfigSource -Raw | ConvertFrom-Json
-            
-            # Get source file hash first
-            $sourceFileHash = (Get-FileHash -Path $resolvedMcpConfigSource -Algorithm SHA256).Hash
-            
-            # Check if we need to update by reading the existing file's metadata
-            $needsUpdate = $true
-            if (Test-Path $mcpConfigDest) {
-                try {
-                    $existingConfig = Get-Content $mcpConfigDest -Raw | ConvertFrom-Json
-                    if ($existingConfig._sourceHash -eq $sourceFileHash) {
-                        $needsUpdate = $false
-                    }
-                }
-                catch {
-                    # If we can't read/parse existing file, regenerate it
-                    $needsUpdate = $true
-                }
-            }
-            
-            if ($needsUpdate) {
-                # Convert from .vscode/mcp.json format (servers) to copilot cli format (mcpServers)
-                $cliConfig = [ordered]@{
-                    _sourceHash = $sourceFileHash
-                    mcpServers = @{}
-                }
-                
-                $servers = if ($sourceConfig.servers) { $sourceConfig.servers } else { $sourceConfig }
-                
-                foreach ($prop in $servers.PSObject.Properties) {
-                    $serverName = $prop.Name
-                    $serverConfig = $prop.Value
-                    
-                    # Skip disabled servers
-                    if ($serverConfig.disabled -eq $true) { continue }
-                    
-                    # Add tools: ["*"] to enable all tools
-                    $serverConfig | Add-Member -NotePropertyName "tools" -NotePropertyValue @("*") -Force
-                    
-                    $cliConfig.mcpServers[$serverName] = $serverConfig
-                }
-                
-                # Generate config with source hash embedded
-                $newConfigJson = $cliConfig | ConvertTo-Json -Depth 10
-                
-                # Write to temp file and atomically swap
-                $tempFile = "$mcpConfigDest.tmp.$PID"
-                try {
-                    $newConfigJson | Set-Content -Path $tempFile -NoNewline
-                    Move-Item -Path $tempFile -Destination $mcpConfigDest -Force
-                    Write-Host "Generated $mcpConfigDest from $resolvedMcpConfigSource" -ForegroundColor Cyan
-                }
-                catch {
-                    # Clean up temp file if move failed
-                    if (Test-Path $tempFile) {
-                        Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
-                    }
-                    throw
-                }
-            }
-        }
-        catch {
-            throw "Failed to convert MCP config: $_"
-        }
+$mcpConfigFileWasSpecified = $PSBoundParameters.ContainsKey('McpConfigFile')
+$mcpConfigPaths = @()
+foreach ($configFile in $McpConfigFile) {
+    $resolvedMcpConfigFile = if ([System.IO.Path]::IsPathRooted($configFile)) { $configFile } else { Join-Path $workspaceRoot $configFile }
+    if (Test-Path -LiteralPath $resolvedMcpConfigFile) {
+        $mcpConfigPaths += (Get-Item -LiteralPath $resolvedMcpConfigFile).FullName
+    } elseif ($mcpConfigFileWasSpecified) {
+        Write-Host "Warning: MCP config '$resolvedMcpConfigFile' not found; continuing without it." -ForegroundColor Yellow
     }
-    elseif (-not (Test-Path $mcpConfigDest)) {
-        # Source doesn't exist and mcp-config.json doesn't exist - warn user
-        Write-Host "Warning: MCP config source '$resolvedMcpConfigSource' not found and no existing $mcpConfigDest" -ForegroundColor Yellow
-    }
-    # else: source doesn't exist but mcp-config.json does - silently continue
 }
 #endregion
 
-#region Parse Prompt File
-# Initialize variables
-$promptName = ""
-$prompt = ""
-$agentArgs = @()
-$tools = $null
+#region Prompt Validation
+$promptName = if ($PromptFile) { [System.IO.Path]::GetFileName($PromptFile) -replace '\.prompt\.md$', '' } else { "" }
 
-if ($PromptFile) {
-    # Read and parse the prompt file
-    $promptContent = Get-Content -Path $PromptFile -Raw
-
-    # Extract prompt name from file path (e.g., "dri" from ".github/prompts/dri.prompt.md")
-    $promptName = [System.IO.Path]::GetFileName($PromptFile) -replace '\.prompt\.md$', ''
-
-    # Extract frontmatter (between --- markers)
-    if ($promptContent -match '(?s)^---\s*\n(.*?)\n---\s*\n(.*)$') {
-        $frontmatter = $matches[1]
-        $prompt = $matches[2].Trim()
-        
-        # Parse agent from frontmatter (unless overridden by parameter)
-        if (-not $Agent -and $frontmatter -match "agent:\s*'([^']+)'") {
-            $agentName = $matches[1]
-            $agentArgs = @("-agent", $agentName)
-        }
-    } else {
-        # No frontmatter, use entire content as prompt
-        $prompt = $promptContent.Trim()
-    }
-}
-
-# Use Agent parameter if provided (overrides frontmatter)
-if ($Agent) {
-    $agentArgs = @("-agent", $Agent)
-}
-# Note: prepending is delegated to Send-CopilotMessage via its -PrependPrompt parameter.
-# Resolve agent files: from -AgentFiles parameter + frontmatter name-based lookup
-$resolvedAgentFiles = @()
-foreach ($af in $AgentFile) {
-    if (Test-Path $af) {
-        $resolvedAgentFiles += (Get-Item $af).FullName
-    } else {
-        Write-Host "Warning: Agent file '$af' not found" -ForegroundColor Yellow
-    }
-}
-# From agent name: always add the convention-based agent file if it exists and isn't already resolved
-if ($agentArgs.Count -gt 1) {
-    $agentFileTest = ".github/agents/$($agentArgs[1]).agent.md"
-    if (Test-Path $agentFileTest) {
-        $resolvedPath = (Get-Item $agentFileTest).FullName
-        if ($resolvedAgentFiles -notcontains $resolvedPath) {
-            $resolvedAgentFiles += $resolvedPath
-        }
-    } else {
-        Write-Host "Warning: Agent file '$agentFileTest' not found for agent '$($agentArgs[1])'" -ForegroundColor Yellow
-    }
-}
-
-# Validate that agent selection has a corresponding agent file
-if ($agentArgs.Count -gt 1 -and $resolvedAgentFiles.Count -eq 0) {
-    throw "Agent '$($agentArgs[1])' was specified but no agent file could be resolved. Provide -AgentFile or ensure .github/agents/$($agentArgs[1]).agent.md exists."
-}
-
-# Validate we have a prompt (body from -PromptFile and/or -PrependPrompt)
-if (-not $prompt -and -not $PrependPrompt) {
+if (-not $PromptFile -and -not $PrependPrompt) {
     throw "No prompt provided. Specify either -PrependPrompt or -PromptFile."
 }
 #endregion
@@ -269,12 +146,18 @@ if (-not (Test-Path -LiteralPath $runDetailsDir)) {
 #endregion
 
 #region Pre-Run Artifacts
-# Save prompt body to run_details folder (prepend is applied by Send-CopilotMessage; recorded as prependPrompt in run details)
-$prompt | Set-Content -LiteralPath "$runDetailsDir/prompt.txt"
+# Save the inline prompt component. Prompt file parsing is delegated to Send-CopilotMessage.
+$PrependPrompt | Set-Content -LiteralPath "$runDetailsDir/prompt.txt"
+if ($PromptFile -and (Test-Path -LiteralPath $PromptFile)) {
+    Copy-Item -LiteralPath $PromptFile -Destination "$runDetailsDir/prompt_file.md" -Force
+}
 
-# Copy mcp-config.json to run_details folder if it exists
-if (Test-Path $mcpConfigDest) {
-    Copy-Item -Path $mcpConfigDest -Destination "$runDetailsDir/mcp-config.json" -Force
+# Copy MCP configs used to the run_details folder if they exist
+if ($mcpConfigPaths.Count -gt 0) {
+    for ($i = 0; $i -lt $mcpConfigPaths.Count; $i++) {
+        $fileName = "mcp-config_{0}.json" -f ($i + 1)
+        Copy-Item -LiteralPath $mcpConfigPaths[$i] -Destination (Join-Path $runDetailsDir $fileName) -Force
+    }
 }
 
 # Get git branch (silently fail if not a git repo)
@@ -317,15 +200,16 @@ $prerunDetails = @{
     promptName = $promptName
     promptFile = $PromptFile
     prependPrompt = $PrependPrompt
-    agent = if ($agentArgs.Count -gt 1) { $agentArgs[1] } else { $null }
-    agentFiles = $resolvedAgentFiles
+    defaultAgent = if ($DefaultAgent) { $DefaultAgent } else { $null }
+    agents = $Agent
+    agentFiles = $AgentFile
     sessionId = $sessionIdPlaceholder
     name = if ($Name) { $Name } else { $null }
     model = $Model
     version = $Version
     systemMessage = $SystemMessage
     workingDirectory = $workingDirectory
-    mcpConfigPath = $mcpConfigDest
+    mcpConfigPaths = $mcpConfigPaths
     gitBranch = $gitBranch
     gitCommit = $gitCommit
     displayFiles = $DisplayFiles
@@ -348,14 +232,15 @@ $success = $null
 try{
     $client = New-CopilotClient -cwd $((Get-Location).Path)
     try{
-        $customAgentsArg = if ($resolvedAgentFiles.Count -gt 0) { @{"-CustomAgentFile" = $resolvedAgentFiles} } else { @{} }
-    $agentArg = if ($agentArgs.Count -gt 1) { @{"-Agent" = $agentArgs[1]} } else { @{} }
+        $customAgentsArg = if ($AgentFile.Count -gt 0) { @{"-CustomAgentFile" = $AgentFile} } else { @{} }
+        $agentsArg = if ($Agent.Count -gt 0) { @{"-Agent" = $Agent} } else { @{} }
+        $defaultAgentArg = if ($DefaultAgent) { @{"-DefaultAgent" = $DefaultAgent} } else { @{} }
+        $mcpConfigArg = if ($mcpConfigPaths.Count -gt 0) { @{"-McpConfigFile" = $mcpConfigPaths} } else { @{} }
         try {
             $session = New-CopilotSession $client `
                 -SystemMessage $SystemMessage `
                 -SystemMessageMode Replace `
-                -McpConfigFile $mcpConfigDest `
-                -InfiniteSessions -Model $Model -stream @customAgentsArg @agentArg
+                -InfiniteSessions -Model $Model -stream @mcpConfigArg @customAgentsArg @agentsArg @defaultAgentArg
         } catch {
             throw "New-CopilotSession failed: $_"
         }
@@ -370,18 +255,16 @@ try{
         try{
     try {
         # Pass the prompt file directly to the cmdlet when present (it parses the body);
-        # otherwise fall back to the inline prompt. Agent resolution above still parses
-        # the prompt file's frontmatter so the agent file can be wired into the session.
+        # otherwise fall back to the inline prompt. Agent files are discovered by
+        # New-CopilotSession from its default/explicit agent file folders.
         $mainPromptArg = @{}
         if ($PromptFile) {
             $mainPromptArg["PromptFile"] = $PromptFile
-        } elseif ($prompt) {
-            $mainPromptArg["Prompt"] = $prompt
         }
         # Keep the resolved agent authoritative so a prompt file's frontmatter agent
-        # doesn't override an explicit -Agent / resolved selection.
-        if ($agentArgs.Count -gt 1) {
-            $mainPromptArg["Agent"] = $agentArgs[1]
+        # doesn't override an explicit -DefaultAgent selection.
+        if ($DefaultAgent) {
+            $mainPromptArg["Agent"] = $DefaultAgent
         }
         Send-CopilotMessage $session -MaxTurns $MaxTurns @mainPromptArg -PrependPrompt $PrependPrompt -timeout $(30*60) -stream | Format-CopilotEvent -LogFile "$runDetailsDir/pwsh_capture.md" | Out-Null
     } catch {
@@ -455,15 +338,16 @@ $runDetails = @{
     promptName = $promptName
     promptFile = $PromptFile
     prependPrompt = $PrependPrompt
-    agent = if ($agentArgs.Count -gt 1) { $agentArgs[1] } else { $null }
-    agentFiles = $resolvedAgentFiles
+    defaultAgent = if ($DefaultAgent) { $DefaultAgent } else { $null }
+    agents = $Agent
+    agentFiles = $AgentFile
     sessionId = if ($sessionId) { $sessionId } else { $sessionIdPlaceholder }
     name = if ($Name) { $Name } else { $null }
     model = $Model
     version = $Version
     systemMessage = $SystemMessage
     workingDirectory = $workingDirectory
-    mcpConfigPath = $mcpConfigDest
+    mcpConfigPaths = $mcpConfigPaths
     gitBranch = $gitBranch
     gitCommit = $gitCommit
     success = $success

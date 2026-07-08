@@ -181,6 +181,14 @@ Invoke-Copilot "Explain this code" -Attachment ./main.cs, ./utils.cs
 
 ### Tool filtering
 
+Custom agent files are discovered automatically from the same local locations Copilot CLI uses:
+the repository `.github/agents` directory first, then `~/.copilot/agents`. Use `-Agent`
+(`-Agents`) to load named agents without selecting one, `-AgentFileFolders` to override
+the ordered discovery folders, and `-DefaultAgent` to select the session's starting agent.
+`-McpConfigFile` accepts one or more files in Copilot CLI `mcpServers` JSON or
+VS Code `.vscode/mcp.json` `servers` JSON; files are merged in order, and duplicate
+server names keep the first definition.
+
 `-AvailableTools` restricts which tools a session can use. Names are passed to the
 Copilot CLI **verbatim** — there is no dynamic MCP discovery and no slash/dash
 normalization, so the selector format matters:
@@ -205,7 +213,7 @@ Invoke-Copilot "Search the wiki" `
 # Scope via an agent instead (slash form, wildcard supported)
 New-CopilotSession `
     -CustomAgents ([GitHub.Copilot.CustomAgentConfig]@{ Name = 'ado-agent'; Tools = @('ado/*', 'task') }) `
-    -Agent ado-agent `
+    -DefaultAgent ado-agent `
     -McpConfigFile ./mcp-config.json
 ```
 
@@ -224,7 +232,7 @@ orchestration-focused default (`task`, `read_agent`, `write_agent`, `list_agents
 Invoke-Copilot "Plan and delegate this work" -IsolatedDefaultAgent
 ```
 
-The switch is **ignored when an agent is specified** (via `-Agent` or a prompt file) — in that
+The switch is **ignored when an agent is specified** (via `-DefaultAgent` or a prompt file) — in that
 case the agent's own `Tools` govern its scope. Because the restriction is applied at the session
 level, it is a hard cap that cascades to any subagents spawned via `task`.
 
@@ -337,4 +345,3 @@ This module runs on Windows, macOS, and Linux wherever .NET 8+ and PowerShell 7.
 ## License
 
 MIT
-

@@ -11,11 +11,11 @@ namespace CopilotShell;
 /// <code>$session = New-CopilotSession $client -Model gpt-5 -SystemMessage "You are a pirate." -SystemMessageMode Replace</code>
 /// <code>$session = New-CopilotSession $client -Model claude-sonnet-4.5 -Stream</code>
 /// <code>$session = New-CopilotSession $client -McpConfigFile C:\code\project\mcp-config.json</code>
-/// <code>$session = New-CopilotSession $client -Agent "my-custom-agent"</code>
+/// <code>$session = New-CopilotSession $client -DefaultAgent "my-custom-agent"</code>
 /// <code>
 /// # Define and use a custom agent inline
 /// $agent = [GitHub.Copilot.CustomAgentConfig]@{ Name = 'reviewer'; Prompt = 'You are a code reviewer.'; Description = 'Reviews code changes' }
-/// $session = New-CopilotSession $client -CustomAgents $agent -Agent reviewer
+/// $session = New-CopilotSession $client -CustomAgents $agent -DefaultAgent reviewer
 /// </code>
 /// <code>
 /// # Load a custom agent from a .agent.md file
@@ -72,14 +72,21 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
     [Parameter(HelpMessage = "Disable infinite sessions.")]
     public SwitchParameter NoInfiniteSessions { get; set; }
 
-    [Parameter(HelpMessage = "Path to an MCP config JSON file (e.g. mcp-config.json) that defines MCP servers to attach to this session.")]
-    public string? McpConfigFile { get; set; }
+    [Parameter(HelpMessage = "Path(s) to MCP config JSON files that define MCP servers to attach to this session. Files are loaded in order; duplicate server names keep the first definition.")]
+    [Alias("McpConfigFiles")]
+    public string[]? McpConfigFile { get; set; }
 
     [Parameter(HelpMessage = "Disable the MCP wrapper that fixes environment variable propagation. By default, local MCP servers are launched through mcp-wrapper to ensure env vars are set correctly.")]
     public SwitchParameter NoMcpWrapper { get; set; }
 
-    [Parameter(HelpMessage = "Name of a custom agent to select for this session (e.g. 'my-agent'). The agent must be available in the Copilot runtime or defined via -CustomAgents.")]
-    public string? Agent { get; set; }
+    [Parameter(HelpMessage = "Name of the default agent to select for this session (e.g. 'my-agent'). The agent can be built in, loaded from -CustomAgents/-CustomAgentFile, or discovered from -AgentFileFolders/default agent file folders.")]
+    [ArgumentCompleter(typeof(CopilotAgentNameCompleter))]
+    public string? DefaultAgent { get; set; }
+
+    [Parameter(HelpMessage = "Agent names to load by searching -AgentFileFolders/default agent file folders. Does not select a default agent.")]
+    [Alias("Agents")]
+    [ArgumentCompleter(typeof(CopilotAgentNameCompleter))]
+    public string[]? Agent { get; set; }
 
     [Parameter(HelpMessage = "One or more CustomAgentConfig objects to register with the session. Use [GitHub.Copilot.CustomAgentConfig]@{ Name='...'; Prompt='...' } to create them.")]
     public CustomAgentConfig[]? CustomAgents { get; set; }
@@ -87,6 +94,10 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
     [Parameter(HelpMessage = "Path(s) to .agent.md files that define custom agents. The agent name is derived from the filename (e.g. 'ado-team.agent.md' → 'ado-team').")]
     [Alias("AgentFile")]
     public string[]? CustomAgentFile { get; set; }
+
+    [Parameter(HelpMessage = "Ordered directories used to discover custom agents by name. Defaults to the repository .github/agents directory first, then ~/.copilot/agents.")]
+    [Alias("AgentFileFolder", "AgentPath", "AgentPaths")]
+    public string[]? AgentFileFolders { get; set; }
 
     [Parameter(HelpMessage = "Timeout in seconds for session creation (default: 120). Set to 0 for no timeout.")]
     public int Timeout { get; set; } = 120;
@@ -109,6 +120,11 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
             };
         }
 
+        var agentFileFoldersWereSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(AgentFileFolders));
+        var agentFileFolders = agentFileFoldersWereSpecified
+            ? AgentFileFolders
+            : AgentDiscovery.GetDefaultAgentFileFolders(ResolvePSPath(".")).ToArray();
+
         await SessionSetupHelper.ConfigureAsync(config, new SessionSetupOptions
         {
             CustomAgents = CustomAgents,
@@ -118,10 +134,13 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
             ExcludedTools = ExcludedTools,
             SkillDirectories = SkillDirectory,
             DisabledSkills = DisabledSkill,
-            McpConfigFile = McpConfigFile,
+            McpConfigFiles = McpConfigFile,
             NoMcpWrapper = NoMcpWrapper.IsPresent,
-            Agent = Agent,
-            AgentWasSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(Agent)),
+            AgentNames = Agent,
+            DefaultAgent = DefaultAgent,
+            DefaultAgentWasSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(DefaultAgent)),
+            AgentFileFolders = agentFileFolders,
+            AgentFileFoldersWereSpecified = agentFileFoldersWereSpecified,
             ResolvePath = ResolvePSPath,
             WriteVerbose = WriteVerbose,
             WriteWarning = WriteWarning
@@ -236,8 +255,14 @@ public sealed class ResumeCopilotSessionCommand : AsyncPSCmdlet
         HelpMessage = "The session ID to resume.")]
     public string SessionId { get; set; } = null!;
 
-    [Parameter(HelpMessage = "Name of a custom agent to select for the resumed session.")]
-    public string? Agent { get; set; }
+    [Parameter(HelpMessage = "Name of the default agent to select for the resumed session.")]
+    [ArgumentCompleter(typeof(CopilotAgentNameCompleter))]
+    public string? DefaultAgent { get; set; }
+
+    [Parameter(HelpMessage = "Agent names to load by searching -AgentFileFolders/default agent file folders. Does not select a default agent.")]
+    [Alias("Agents")]
+    [ArgumentCompleter(typeof(CopilotAgentNameCompleter))]
+    public string[]? Agent { get; set; }
 
     [Parameter(HelpMessage = "One or more CustomAgentConfig objects to register with the resumed session.")]
     public CustomAgentConfig[]? CustomAgents { get; set; }
@@ -245,6 +270,10 @@ public sealed class ResumeCopilotSessionCommand : AsyncPSCmdlet
     [Parameter(HelpMessage = "Path(s) to .agent.md files that define custom agents.")]
     [Alias("AgentFile")]
     public string[]? CustomAgentFile { get; set; }
+
+    [Parameter(HelpMessage = "Ordered directories used to discover custom agents by name. Defaults to the repository .github/agents directory first, then ~/.copilot/agents.")]
+    [Alias("AgentFileFolder", "AgentPath", "AgentPaths")]
+    public string[]? AgentFileFolders { get; set; }
 
     [Parameter(HelpMessage = "One or more directories to discover skills from. Passing any directory enables skills for the resumed session.")]
     [Alias("SkillDirectories")]
@@ -259,13 +288,21 @@ public sealed class ResumeCopilotSessionCommand : AsyncPSCmdlet
         var config = new ResumeSessionConfig();
         config.OnPermissionRequest = PermissionHandler.ApproveAll;
 
+        var agentFileFoldersWereSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(AgentFileFolders));
+        var agentFileFolders = agentFileFoldersWereSpecified
+            ? AgentFileFolders
+            : AgentDiscovery.GetDefaultAgentFileFolders(ResolvePSPath(".")).ToArray();
+
         var setupResult = SessionSetupHelper.ConfigureResume(config, new SessionSetupOptions
         {
             CustomAgents = CustomAgents,
             CustomAgentFiles = CustomAgentFile,
             SkillDirectories = SkillDirectory,
             DisabledSkills = DisabledSkill,
-            Agent = Agent,
+            AgentNames = Agent,
+            DefaultAgent = DefaultAgent,
+            AgentFileFolders = agentFileFolders,
+            AgentFileFoldersWereSpecified = agentFileFoldersWereSpecified,
             ResolvePath = ResolvePSPath,
             WriteVerbose = WriteVerbose,
             WriteWarning = WriteWarning

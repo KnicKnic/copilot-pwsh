@@ -11,10 +11,13 @@ internal sealed class SessionSetupOptions
     public string[]? ExcludedTools { get; init; }
     public string[]? SkillDirectories { get; init; }
     public string[]? DisabledSkills { get; init; }
-    public string? McpConfigFile { get; init; }
+    public string[]? McpConfigFiles { get; init; }
     public bool NoMcpWrapper { get; init; }
-    public string? Agent { get; init; }
-    public bool AgentWasSpecified { get; init; }
+    public string[]? AgentNames { get; init; }
+    public string? DefaultAgent { get; init; }
+    public bool DefaultAgentWasSpecified { get; init; }
+    public string[]? AgentFileFolders { get; init; }
+    public bool AgentFileFoldersWereSpecified { get; init; }
     public string? PromptFileAgent { get; init; }
     public Func<string, string> ResolvePath { get; init; } = static path => path;
     public Action<string> WriteVerbose { get; init; } = static _ => { };
@@ -34,13 +37,13 @@ internal sealed class SessionSetupResult
 /// selected agent is applied:</para>
 /// <list type="bullet">
 ///   <item><see cref="ConfigureAsync"/> — for <b>creating</b> a session (<see cref="SessionConfig"/>).
-///   The agent (from <c>-Agent</c> or a prompt file) is <i>pre-selected</i> by setting
+///   The agent (from <c>-DefaultAgent</c> or a prompt file) is <i>pre-selected</i> by setting
 ///   <see cref="SessionConfigBase.Agent"/> before the session is created. A sole custom agent is
 ///   never auto-selected.</item>
 ///   <item><see cref="ConfigureResume"/> — for <b>resuming</b> a session (<see cref="ResumeSessionConfig"/>).
 ///   The config's <see cref="SessionConfigBase.Agent"/> is left unset; the agent name is returned so the
 ///   caller can apply it <i>after</i> resume via <c>session.Rpc.Agent.SelectAsync</c>. An agent is selected
-///   only when explicitly requested via <c>-Agent</c>; a sole custom agent is never auto-selected.</item>
+///   only when explicitly requested via <c>-DefaultAgent</c>; a sole custom agent is never auto-selected.</item>
 /// </list>
 ///
 /// <para>Shared configuration core (intentionally minimal — applies to both paths):</para>
@@ -116,7 +119,7 @@ internal static class SessionSetupHelper
     {
         var allAgents = RegisterAgents(sessionConfig, options);
 
-        // Create-time agent: explicit -Agent or a prompt file. A sole custom agent is NOT auto-selected.
+        // Create-time agent: explicit -DefaultAgent or a prompt file. A sole custom agent is NOT auto-selected.
         var agentToSelect = ResolveCreateAgent(options);
 
         ApplyServersToolsAndSkills(sessionConfig, options, agentToSelect);
@@ -144,7 +147,7 @@ internal static class SessionSetupHelper
     /// <see cref="ConfigureAsync"/> — does NOT pre-set <see cref="SessionConfigBase.Agent"/>. The
     /// resolved agent name is returned via <see cref="SessionSetupResult.AgentToSelect"/> so the
     /// caller can apply it after resume through <c>session.Rpc.Agent.SelectAsync</c>. An agent is
-    /// selected only when explicitly requested via <c>-Agent</c>; a sole loaded custom agent is
+    /// selected only when explicitly requested via <c>-DefaultAgent</c>; a sole loaded custom agent is
     /// never auto-selected.
     /// </summary>
     public static SessionSetupResult ConfigureResume(
@@ -153,9 +156,9 @@ internal static class SessionSetupHelper
     {
         var allAgents = RegisterAgents(resumeConfig, options);
 
-        // Resume-time agent: selected only when explicitly requested via -Agent. A sole loaded
+        // Resume-time agent: selected only when explicitly requested via -DefaultAgent. A sole loaded
         // custom agent is NOT auto-selected.
-        var agentToSelect = options.Agent;
+        var agentToSelect = options.DefaultAgent;
 
         ApplyServersToolsAndSkills(resumeConfig, options, agentToSelect);
         LogAgentTools(allAgents, options);
@@ -202,19 +205,36 @@ internal static class SessionSetupHelper
     }
 
     /// <summary>
-    /// Loads MCP servers from <see cref="SessionSetupOptions.McpConfigFile"/> (if given), optionally
+    /// Loads MCP servers from <see cref="SessionSetupOptions.McpConfigFiles"/> (if given), optionally
     /// wraps local servers via <c>mcp-wrapper</c>, and attaches ALL of them to the session. They are
     /// never filtered out or attached to individual agents — agents scope themselves through their own
     /// Tools list (e.g. "&lt;server&gt;/*").
     /// </summary>
     private static void ApplyMcpServers(SessionConfigBase config, SessionSetupOptions options)
     {
-        if (options.McpConfigFile is null)
+        if (options.McpConfigFiles is not { Length: > 0 })
             return;
 
-        options.WriteVerbose($"Loading MCP config from: {options.McpConfigFile}");
-        var mcpConfig = McpConfigLoader.Load(options.ResolvePath(options.McpConfigFile));
-        options.WriteVerbose($"Loaded {mcpConfig.Count} MCP server(s): {string.Join(", ", mcpConfig.Keys)}");
+        var mcpConfig = new Dictionary<string, McpServerConfig>(StringComparer.Ordinal);
+        foreach (var file in options.McpConfigFiles)
+        {
+            var resolvedPath = options.ResolvePath(file);
+            options.WriteVerbose($"Loading MCP config from: {resolvedPath}");
+            var loaded = McpConfigLoader.Load(resolvedPath);
+            foreach (var (serverName, serverConfig) in loaded)
+            {
+                if (mcpConfig.TryAdd(serverName, serverConfig))
+                {
+                    options.WriteVerbose($"Loaded MCP server '{serverName}' from {resolvedPath}");
+                }
+                else
+                {
+                    options.WriteVerbose($"Skipping duplicate MCP server '{serverName}' from {resolvedPath}; an earlier config wins.");
+                }
+            }
+        }
+
+        options.WriteVerbose($"Loaded {mcpConfig.Count} unique MCP server(s): {string.Join(", ", mcpConfig.Keys)}");
 
         if (!options.NoMcpWrapper)
         {
@@ -295,12 +315,32 @@ internal static class SessionSetupHelper
 
     private static List<CustomAgentConfig>? LoadAgents(SessionSetupOptions options)
     {
-        if (options.CustomAgents is null && options.CustomAgentFiles is null)
-            return null;
-
         var allAgents = new List<CustomAgentConfig>();
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        bool AddAgent(CustomAgentConfig agent, string source)
+        {
+            if (string.IsNullOrWhiteSpace(agent.Name))
+            {
+                options.WriteWarning($"Skipping agent from {source} because it has no name.");
+                return false;
+            }
+
+            if (!seenNames.Add(agent.Name))
+            {
+                options.WriteVerbose($"Skipping duplicate agent '{agent.Name}' from {source}; an earlier agent with the same name wins.");
+                return false;
+            }
+
+            allAgents.Add(agent);
+            return true;
+        }
+
         if (options.CustomAgents is not null)
-            allAgents.AddRange(options.CustomAgents);
+        {
+            foreach (var agent in options.CustomAgents)
+                AddAgent(agent, "CustomAgents");
+        }
 
         if (options.CustomAgentFiles is not null)
         {
@@ -308,21 +348,78 @@ internal static class SessionSetupHelper
             {
                 var resolvedPath = options.ResolvePath(file);
                 var parsed = AgentFileParser.Parse(resolvedPath);
-                allAgents.Add(parsed);
-                options.WriteVerbose($"Loaded agent '{parsed.Name}' from {Path.GetFileName(resolvedPath)}");
+                if (AddAgent(parsed, resolvedPath))
+                    options.WriteVerbose($"Loaded agent '{parsed.Name}' from {Path.GetFileName(resolvedPath)}");
             }
         }
 
-        return allAgents;
+        var workingDirectory = options.ResolvePath(".");
+        var agentFileFolders = AgentDiscovery.ResolveAgentFileFolders(options.AgentFileFolders ?? Array.Empty<string>(), options.ResolvePath);
+        options.WriteVerbose($"Agent file folders ({agentFileFolders.Count}): {string.Join(", ", agentFileFolders)}");
+
+        var requestedAgentNames = RequestedAgentNames(options);
+        if (requestedAgentNames is { Count: > 0 })
+        {
+            foreach (var agentName in requestedAgentNames)
+            {
+                var file = AgentDiscovery.FindAgentFile(agentName, agentFileFolders, options.ResolvePath);
+                if (file is null)
+                {
+                    options.WriteWarning($"Agent '{agentName}' was requested but no matching .agent.md file was found in the agent file folders.");
+                    continue;
+                }
+
+                var parsed = AgentFileParser.Parse(file);
+                if (AddAgent(parsed, file))
+                    options.WriteVerbose($"Loaded agent '{parsed.Name}' from {file}");
+            }
+        }
+        else
+        {
+            var warnMissingAgentFileFolders = options.AgentFileFoldersWereSpecified;
+            foreach (var file in AgentDiscovery.EnumerateAgentFiles(agentFileFolders, options.WriteWarning, warnMissingAgentFileFolders))
+            {
+                var parsed = AgentFileParser.Parse(file);
+                if (AddAgent(parsed, file))
+                    options.WriteVerbose($"Loaded agent '{parsed.Name}' from {file}");
+            }
+        }
+
+        return allAgents.Count > 0 ? allAgents : null;
+    }
+
+    private static IReadOnlyList<string> RequestedAgentNames(SessionSetupOptions options)
+    {
+        var names = new List<string>();
+
+        void AddName(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return;
+
+            if (!names.Contains(name, StringComparer.OrdinalIgnoreCase))
+                names.Add(name);
+        }
+
+        if (options.AgentNames is not null)
+        {
+            foreach (var agentName in options.AgentNames)
+                AddName(agentName);
+        }
+
+        AddName(options.DefaultAgent);
+        AddName(options.PromptFileAgent);
+
+        return names;
     }
 
     /// <summary>Resolves the agent to select when <b>creating</b> a session: explicit
-    /// <c>-Agent</c> takes precedence, then a prompt-file agent. A sole custom agent is NOT
+    /// <c>-DefaultAgent</c> takes precedence, then a prompt-file agent. A sole custom agent is NOT
     /// auto-selected.</summary>
     private static string? ResolveCreateAgent(SessionSetupOptions options)
     {
-        if (options.AgentWasSpecified && options.Agent is not null)
-            return options.Agent;
+        if (options.DefaultAgentWasSpecified && options.DefaultAgent is not null)
+            return options.DefaultAgent;
 
         if (options.PromptFileAgent is not null)
         {
