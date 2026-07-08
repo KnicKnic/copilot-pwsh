@@ -5,7 +5,7 @@ description: 'Run autonomous Copilot tasks via Invoke-CopilotTask.ps1. Use when 
 
 # Invoke-CopilotTask
 
-Runs autonomous Copilot sessions from the command line. Handles MCP config conversion, agent file resolution, session lifecycle, run tracking, and success validation.
+Runs autonomous Copilot sessions from the command line. Handles session lifecycle, run tracking, MCP config forwarding, custom agent discovery through CopilotShell bindings, and success validation.
 
 ## When to Use
 
@@ -38,7 +38,7 @@ The wrapper is a thin PowerShell script that collects inputs, resolves context, 
 
 ### 4. Ensure MCP tools are available
 
-If your task needs MCP tools (GitHub CLI, ADO, etc.), make sure `.vscode/mcp.json` exists in the target repo. Invoke-CopilotTask auto-converts it to Copilot CLI format.
+If your task needs MCP tools (GitHub CLI, ADO, etc.), make sure `.mcp.json` exists in the target repo or `~/.copilot/mcp-config.json` exists in your home directory, or pass VS Code/Copilot CLI-format configs with `-McpConfigFile`. CopilotShell accepts both formats directly and merges configs in order.
 
 ## Agent and Prompt Resolution
 
@@ -46,21 +46,21 @@ If your task needs MCP tools (GitHub CLI, ADO, etc.), make sure `.vscode/mcp.jso
 
 The agent is resolved in priority order:
 
-1. **`-Agent` parameter** — always wins if provided
+1. **`-DefaultAgent` parameter** — always wins if provided
 2. **Prompt file frontmatter** — if `-PromptFile` has `agent: 'my-agent'` in its YAML frontmatter
 3. **No agent** — if neither is set, the session runs without a named agent
 
-Once an agent name is resolved, the script looks for `.github/agents/<name>.agent.md` in the working directory. If the file doesn't exist and no `-AgentFile` was provided, it throws an error.
+Agent files are discovered by CopilotShell, not by this script. `Invoke-CopilotTask.ps1` uses the default search paths: the repository `.github/agents` directory first, then `~/.copilot/agents`, with earlier paths winning on name conflicts. Use `-Agent` (`-Agents`) to load named agents without selecting one.
 
-You can also pass explicit agent file paths with `-AgentFile` — these are used in addition to the convention-based lookup.
+You can also pass explicit agent file paths with `-AgentFile`.
 
-### When `-Agent` is necessary
+### When `-DefaultAgent` is necessary
 
-- **No prompt file** — if you only use `-PrependPrompt`, there's no frontmatter to read the agent from. You must pass `-Agent` explicitly (or omit it to run without one).
-- **Multiple agents** — if your repo has several `.agent.md` files and you want to pick one that differs from what the prompt file specifies, use `-Agent` to override.
-- **Reusing a prompt with different agents** — the same prompt file can be run with different agent configurations by passing `-Agent` at the wrapper level.
+- **No prompt file** — if you only use `-PrependPrompt`, there's no frontmatter to read the agent from. You must pass `-DefaultAgent` explicitly (or omit it to run without one).
+- **Multiple agents** — if your repo has several `.agent.md` files and you want to pick one that differs from what the prompt file specifies, use `-DefaultAgent` to override.
+- **Reusing a prompt with different agents** — the same prompt file can be run with different agent configurations by passing `-DefaultAgent` at the wrapper level.
 
-### When `-Agent` is not needed
+### When `-DefaultAgent` is not needed
 
 - **Prompt file specifies the agent** — if your `.prompt.md` has `agent: 'my-agent'` in frontmatter, the script picks it up automatically.
 - **No agent needed** — simple tasks that don't need agent-specific instructions or tool restrictions can run without one.
@@ -124,15 +124,16 @@ The prompt is generic and reusable. The wrapper injects run-specific context via
 | `-PrependPrompt` | string | Inline prompt (prepended to prompt file content if both given) |
 | `-PromptFile` | string | Path to a `.prompt.md` file |
 | `-Name` | string | Run name — output goes to `.copilot_runs/<Name>/` |
-| `-Agent` | string | Agent name (resolves `.github/agents/<name>.agent.md`) |
+| `-DefaultAgent` | string | Default agent name to select |
+| `-Agent` | string[] | Agent names to load without selecting a default agent (`-Agents` alias) |
+| `-AgentFile` | string[] | Explicit `.agent.md` files to load |
 | `-Model` | string | Model to use (default: `claude-opus-4.6`) |
 | `-RunOnce` | switch | Skip if previous run succeeded with same `-Version` |
 | `-Check` | switch | Return `$true`/`$false` without running |
 | `-Version` | string | Version tag for idempotent run tracking |
 | `-AdditionalPrompts` | string[] | Follow-up prompts in the same session |
 | `-promptSuccessYesNoQuestion` | string | Yes/no question to determine success |
-| `-McpConfigSource` | string | MCP config path (default: `.vscode/mcp.json`) |
-| `-SkipMcpConfig` | switch | Skip MCP config conversion |
+| `-McpConfigFile` | string[] | MCP config paths (default: `.mcp.json`, `~/.copilot/mcp-config.json`; `-McpConfigFiles` and `-McpConfigSource` aliases) |
 
 ## Run Output
 
@@ -142,7 +143,8 @@ Each run produces a tracked output directory:
 .copilot_runs/<Name>/
 ├── prerun_details.json   # Config snapshot before execution
 ├── prompt.txt            # The resolved prompt
-├── mcp-config.json       # MCP config used
+├── mcp-config_1.json     # First MCP config used (if any)
+├── mcp-config_2.json     # Second MCP config used (if any)
 ├── pwsh_capture.md       # Streaming output log
 └── run_details.json      # Final results (success, duration, exit code)
 ```
