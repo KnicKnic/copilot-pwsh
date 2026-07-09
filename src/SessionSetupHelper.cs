@@ -16,8 +16,8 @@ internal sealed class SessionSetupOptions
     public string[]? AgentNames { get; init; }
     public string? DefaultAgent { get; init; }
     public bool DefaultAgentWasSpecified { get; init; }
-    public string[]? AgentFileFolders { get; init; }
-    public bool AgentFileFoldersWereSpecified { get; init; }
+    public string[]? AgentFolders { get; init; }
+    public bool AgentFoldersWereSpecified { get; init; }
     public string? PromptFileAgent { get; init; }
     public Func<string, string> ResolvePath { get; init; } = static path => path;
     public Action<string> WriteVerbose { get; init; } = static _ => { };
@@ -353,19 +353,18 @@ internal static class SessionSetupHelper
             }
         }
 
-        var workingDirectory = options.ResolvePath(".");
-        var agentFileFolders = AgentDiscovery.ResolveAgentFileFolders(options.AgentFileFolders ?? Array.Empty<string>(), options.ResolvePath);
-        options.WriteVerbose($"Agent file folders ({agentFileFolders.Count}): {string.Join(", ", agentFileFolders)}");
+        var agentFolders = AgentDiscovery.ResolveAgentFolders(options.AgentFolders ?? Array.Empty<string>(), options.ResolvePath);
+        options.WriteVerbose($"Agent folders ({agentFolders.Count}): {string.Join(", ", agentFolders)}");
 
         var requestedAgentNames = RequestedAgentNames(options);
         if (requestedAgentNames is { Count: > 0 })
         {
             foreach (var agentName in requestedAgentNames)
             {
-                var file = AgentDiscovery.FindAgentFile(agentName, agentFileFolders, options.ResolvePath);
+                var file = AgentDiscovery.FindAgentFile(agentName, agentFolders, options.ResolvePath);
                 if (file is null)
                 {
-                    options.WriteWarning($"Agent '{agentName}' was requested but no matching .agent.md file was found in the agent file folders.");
+                    options.WriteWarning($"Agent '{agentName}' was requested but no matching .agent.md file was found in the agent folders.");
                     continue;
                 }
 
@@ -376,8 +375,8 @@ internal static class SessionSetupHelper
         }
         else
         {
-            var warnMissingAgentFileFolders = options.AgentFileFoldersWereSpecified;
-            foreach (var file in AgentDiscovery.EnumerateAgentFiles(agentFileFolders, options.WriteWarning, warnMissingAgentFileFolders))
+            var warnMissingAgentFolders = options.AgentFoldersWereSpecified;
+            foreach (var file in AgentDiscovery.EnumerateAgentFiles(agentFolders, options.WriteWarning, warnMissingAgentFolders))
             {
                 var parsed = AgentFileParser.Parse(file);
                 if (AddAgent(parsed, file))

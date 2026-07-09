@@ -11,7 +11,7 @@ param(
             Where-Object { $_ -like "*$wordToComplete*" }
     })]
     [string]$PromptFile = "",
-    
+
     [Parameter(Mandatory=$false)]
     [string]$Name = "",
 
@@ -38,17 +38,37 @@ param(
     [string[]]$AgentFile = @(),
 
     [Parameter(Mandatory=$false)]
-    [Alias("Agents")]
-    [ArgumentCompleter([CopilotShell.CopilotAgentNameCompleter])]
+    [Alias("AgentNames", "Agents")]
+    [ArgumentCompleter({
+        param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+        [CopilotShell.CopilotAgentNameCompleter]::new().CompleteArgument(
+            $commandName,
+            $parameterName,
+            $wordToComplete,
+            $commandAst,
+            $fakeBoundParameters)
+    })]
     [string[]]$Agent = @(),
 
     [Parameter(Mandatory=$false)]
-    [ArgumentCompleter([CopilotShell.CopilotAgentNameCompleter])]
+    [Alias("AgentFolder", "AgentFileFolder", "AgentFileFolders", "AgentPath", "AgentPaths")]
+    [string[]]$AgentFolders = @(),
+
+    [Parameter(Mandatory=$false)]
+    [ArgumentCompleter({
+        param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+        [CopilotShell.CopilotAgentNameCompleter]::new().CompleteArgument(
+            $commandName,
+            $parameterName,
+            $wordToComplete,
+            $commandAst,
+            $fakeBoundParameters)
+    })]
     [string]$DefaultAgent = "",
 
     [Parameter(Mandatory=$false)]
-    [ValidateSet("claude-sonnet-4.5","claude-sonnet-4.6", "claude-haiku-4.5", "claude-opus-4.5", "claude-opus-4.6", "claude-sonnet-4", 
-                 "gemini-3-pro-preview", "gpt-5.2-codex", "gpt-5.2", "gpt-5.1-codex-max", 
+    [ValidateSet("claude-sonnet-4.5","claude-sonnet-4.6", "claude-haiku-4.5", "claude-opus-4.5", "claude-opus-4.6", "claude-sonnet-4",
+                 "gemini-3-pro-preview", "gpt-5.2-codex", "gpt-5.2", "gpt-5.1-codex-max",
                  "gpt-5.1-codex", "gpt-5.1", "gpt-5", "gpt-5.1-codex-mini", "gpt-5-mini", "gpt-4.1")]
     [string]$Model = "claude-opus-4.6",
 
@@ -69,7 +89,7 @@ param(
 
     [Parameter(Mandatory=$false)]
     [string[]]$AdditionalArgs = @(),
-    
+
     [Parameter(Mandatory=$false)]
     [string] $promptSuccessYesNoQuestion = "",
 
@@ -202,6 +222,7 @@ $prerunDetails = @{
     prependPrompt = $PrependPrompt
     defaultAgent = if ($DefaultAgent) { $DefaultAgent } else { $null }
     agents = $Agent
+    agentFolders = $AgentFolders
     agentFiles = $AgentFile
     sessionId = $sessionIdPlaceholder
     name = if ($Name) { $Name } else { $null }
@@ -234,24 +255,25 @@ try{
     try{
         $customAgentsArg = if ($AgentFile.Count -gt 0) { @{"-CustomAgentFile" = $AgentFile} } else { @{} }
         $agentsArg = if ($Agent.Count -gt 0) { @{"-Agent" = $Agent} } else { @{} }
+        $agentFoldersArg = if ($AgentFolders.Count -gt 0) { @{"-AgentFolders" = $AgentFolders} } else { @{} }
         $defaultAgentArg = if ($DefaultAgent) { @{"-DefaultAgent" = $DefaultAgent} } else { @{} }
         $mcpConfigArg = if ($mcpConfigPaths.Count -gt 0) { @{"-McpConfigFile" = $mcpConfigPaths} } else { @{} }
         try {
             $session = New-CopilotSession $client `
                 -SystemMessage $SystemMessage `
                 -SystemMessageMode Replace `
-                -InfiniteSessions -Model $Model -stream @mcpConfigArg @customAgentsArg @agentsArg @defaultAgentArg
+                -InfiniteSessions -Model $Model -stream @mcpConfigArg @customAgentsArg @agentsArg @agentFoldersArg @defaultAgentArg
         } catch {
             throw "New-CopilotSession failed: $_"
         }
         $sessionId = $session.SessionId
-        
+
         # Update prerun_details.json with actual session ID
         if ($sessionId) {
             $prerunDetails.sessionId = $sessionId
             $prerunDetails | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath "$runDetailsDir/prerun_details.json"
         }
-        
+
         try{
     try {
         # Pass the prompt file directly to the cmdlet when present (it parses the body);
@@ -270,7 +292,7 @@ try{
     } catch {
         throw "Send-CopilotMessage (main prompt) failed: $_"
     }
-            
+
             # Execute additional prompts if provided
             if ($AdditionalPrompts.Count -gt 0) {
                 Write-Host "Executing $($AdditionalPrompts.Count) additional prompt(s)..." -ForegroundColor Cyan
@@ -282,7 +304,7 @@ try{
                     }
                 }
             }
-            
+
             if($promptSuccessYesNoQuestion -ne ""){
                 try {
                     $yesNo = Send-CopilotMessage $session -prompt $promptSuccessYesNoQuestion
@@ -300,7 +322,7 @@ try{
                 Write-Host "No prompt success indicator specified, skipping success check." -ForegroundColor Yellow
             }
 
-            if ($success -eq $null) { 
+            if ($success -eq $null) {
                 $success = $true
             }
             # Send-CopilotMessage $session -prompt "what tools are available to you, can you say them?" -timeout $(30*60) -stream | Format-CopilotEvent
@@ -340,6 +362,7 @@ $runDetails = @{
     prependPrompt = $PrependPrompt
     defaultAgent = if ($DefaultAgent) { $DefaultAgent } else { $null }
     agents = $Agent
+    agentFolders = $AgentFolders
     agentFiles = $AgentFile
     sessionId = if ($sessionId) { $sessionId } else { $sessionIdPlaceholder }
     name = if ($Name) { $Name } else { $null }

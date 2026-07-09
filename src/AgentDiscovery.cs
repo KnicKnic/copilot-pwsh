@@ -8,7 +8,7 @@ internal static class AgentDiscovery
 {
     private const string AgentFilePattern = "*.agent.md";
 
-    public static IReadOnlyList<string> GetDefaultAgentFileFolders(string workingDirectory)
+    public static IReadOnlyList<string> GetDefaultAgentFolders(string workingDirectory)
     {
         var directories = new List<string>();
 
@@ -22,26 +22,26 @@ internal static class AgentDiscovery
         return DeduplicatePaths(directories);
     }
 
-    public static IReadOnlyList<string> ResolveAgentFileFolders(
-        IEnumerable<string> agentFileFolders,
+    public static IReadOnlyList<string> ResolveAgentFolders(
+        IEnumerable<string> agentFolders,
         Func<string, string> resolvePath)
     {
-        return DeduplicatePaths(agentFileFolders.Select(resolvePath));
+        return DeduplicatePaths(agentFolders.Select(resolvePath));
     }
 
     public static IEnumerable<string> EnumerateAgentFiles(
-        IEnumerable<string> agentFileFolders,
+        IEnumerable<string> agentFolders,
         Action<string> writeWarning,
         bool warnMissing)
     {
-        foreach (var path in agentFileFolders)
+        foreach (var path in agentFolders)
         {
             if (File.Exists(path))
             {
                 if (IsAgentFile(path))
                     yield return path;
                 else
-                    writeWarning($"Agent file folder '{path}' is a file but does not end with '.agent.md'.");
+                    writeWarning($"Agent folder '{path}' is a file but does not end with '.agent.md'.");
 
                 continue;
             }
@@ -49,7 +49,7 @@ internal static class AgentDiscovery
             if (!Directory.Exists(path))
             {
                 if (warnMissing)
-                    writeWarning($"Agent file folder '{path}' does not exist.");
+                    writeWarning($"Agent folder '{path}' does not exist.");
                 continue;
             }
 
@@ -61,9 +61,9 @@ internal static class AgentDiscovery
         }
     }
 
-    public static IEnumerable<(string Name, string Path)> EnumerateAgentProfiles(IEnumerable<string> agentFileFolders)
+    public static IEnumerable<(string Name, string Path)> EnumerateAgentProfiles(IEnumerable<string> agentFolders)
     {
-        foreach (var file in EnumerateAgentFiles(agentFileFolders, static _ => { }, warnMissing: false))
+        foreach (var file in EnumerateAgentFiles(agentFolders, static _ => { }, warnMissing: false))
         {
             yield return (AgentFileParser.ExtractAgentName(Path.GetFileName(file)), file);
         }
@@ -71,7 +71,7 @@ internal static class AgentDiscovery
 
     public static string? FindAgentFile(
         string agentNameOrPath,
-        IEnumerable<string> agentFileFolders,
+        IEnumerable<string> agentFolders,
         Func<string, string> resolvePath)
     {
         var resolvedCandidate = resolvePath(agentNameOrPath);
@@ -82,7 +82,7 @@ internal static class AgentDiscovery
             ? Path.GetFileName(agentNameOrPath)
             : $"{agentNameOrPath}.agent.md";
 
-        foreach (var path in agentFileFolders)
+        foreach (var path in agentFolders)
         {
             if (File.Exists(path))
             {
@@ -156,10 +156,10 @@ public sealed class CopilotAgentNameCompleter : IArgumentCompleter
         IDictionary fakeBoundParameters)
     {
         var workingDirectory = GetCurrentPowerShellDirectory();
-        var agentFileFolders = GetBoundAgentFileFolders(fakeBoundParameters);
-        var searchPaths = agentFileFolders is { Length: > 0 }
-            ? AgentDiscovery.ResolveAgentFileFolders(agentFileFolders, path => ResolveCompleterPath(path, workingDirectory))
-            : AgentDiscovery.GetDefaultAgentFileFolders(workingDirectory);
+        var agentFolders = GetBoundAgentFolders(fakeBoundParameters);
+        var searchPaths = agentFolders is { Length: > 0 }
+            ? AgentDiscovery.ResolveAgentFolders(agentFolders, path => ResolveCompleterPath(path, workingDirectory))
+            : AgentDiscovery.GetDefaultAgentFolders(workingDirectory);
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, path) in AgentDiscovery.EnumerateAgentProfiles(searchPaths))
@@ -177,9 +177,9 @@ public sealed class CopilotAgentNameCompleter : IArgumentCompleter
         return Directory.GetCurrentDirectory();
     }
 
-    private static string[]? GetBoundAgentFileFolders(IDictionary fakeBoundParameters)
+    private static string[]? GetBoundAgentFolders(IDictionary fakeBoundParameters)
     {
-        foreach (var key in new[] { "AgentFileFolder", "AgentFileFolders", "AgentPath", "AgentPaths" })
+        foreach (var key in new[] { "AgentFolder", "AgentFolders", "AgentFileFolder", "AgentFileFolders", "AgentPath", "AgentPaths" })
         {
             if (!fakeBoundParameters.Contains(key))
                 continue;

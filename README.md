@@ -183,8 +183,9 @@ Invoke-Copilot "Explain this code" -Attachment ./main.cs, ./utils.cs
 
 Custom agent files are discovered automatically from the same local locations Copilot CLI uses:
 the repository `.github/agents` directory first, then `~/.copilot/agents`. Use `-Agent`
-(`-Agents`) to load named agents without selecting one, `-AgentFileFolders` to override
-the ordered discovery folders, and `-DefaultAgent` to select the session's starting agent.
+(`-AgentNames`/`-Agents`) to load named agents without selecting one; each name is resolved
+as `<agent-folder>/<agent-name>.agent.md`. Use `-AgentFolders` to override the ordered
+discovery folders, and `-DefaultAgent` to select the session's starting agent.
 `-McpConfigFile` accepts one or more files in Copilot CLI `mcpServers` JSON or
 VS Code `.vscode/mcp.json` `servers` JSON; files are merged in order, and duplicate
 server names keep the first definition.

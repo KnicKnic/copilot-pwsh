@@ -79,12 +79,12 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
     [Parameter(HelpMessage = "Disable the MCP wrapper that fixes environment variable propagation. By default, local MCP servers are launched through mcp-wrapper to ensure env vars are set correctly.")]
     public SwitchParameter NoMcpWrapper { get; set; }
 
-    [Parameter(HelpMessage = "Name of the default agent to select for this session (e.g. 'my-agent'). The agent can be built in, loaded from -CustomAgents/-CustomAgentFile, or discovered from -AgentFileFolders/default agent file folders.")]
+    [Parameter(HelpMessage = "Name of the default agent to select for this session (e.g. 'my-agent'). The agent can be built in, loaded from -CustomAgents/-CustomAgentFile, or discovered from -AgentFolders/default agent folders.")]
     [ArgumentCompleter(typeof(CopilotAgentNameCompleter))]
     public string? DefaultAgent { get; set; }
 
-    [Parameter(HelpMessage = "Agent names to load by searching -AgentFileFolders/default agent file folders. Does not select a default agent.")]
-    [Alias("Agents")]
+    [Parameter(HelpMessage = "Agent names to load by searching -AgentFolders/default agent folders. Does not select a default agent.")]
+    [Alias("AgentNames", "Agents")]
     [ArgumentCompleter(typeof(CopilotAgentNameCompleter))]
     public string[]? Agent { get; set; }
 
@@ -96,8 +96,8 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
     public string[]? CustomAgentFile { get; set; }
 
     [Parameter(HelpMessage = "Ordered directories used to discover custom agents by name. Defaults to the repository .github/agents directory first, then ~/.copilot/agents.")]
-    [Alias("AgentFileFolder", "AgentPath", "AgentPaths")]
-    public string[]? AgentFileFolders { get; set; }
+    [Alias("AgentFolder", "AgentFileFolder", "AgentFileFolders", "AgentPath", "AgentPaths")]
+    public string[]? AgentFolders { get; set; }
 
     [Parameter(HelpMessage = "Timeout in seconds for session creation (default: 120). Set to 0 for no timeout.")]
     public int Timeout { get; set; } = 120;
@@ -120,10 +120,10 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
             };
         }
 
-        var agentFileFoldersWereSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(AgentFileFolders));
-        var agentFileFolders = agentFileFoldersWereSpecified
-            ? AgentFileFolders
-            : AgentDiscovery.GetDefaultAgentFileFolders(ResolvePSPath(".")).ToArray();
+        var agentFoldersWereSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(AgentFolders));
+        var agentFolders = agentFoldersWereSpecified
+            ? AgentFolders
+            : AgentDiscovery.GetDefaultAgentFolders(ResolvePSPath(".")).ToArray();
 
         await SessionSetupHelper.ConfigureAsync(config, new SessionSetupOptions
         {
@@ -139,8 +139,8 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
             AgentNames = Agent,
             DefaultAgent = DefaultAgent,
             DefaultAgentWasSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(DefaultAgent)),
-            AgentFileFolders = agentFileFolders,
-            AgentFileFoldersWereSpecified = agentFileFoldersWereSpecified,
+            AgentFolders = agentFolders,
+            AgentFoldersWereSpecified = agentFoldersWereSpecified,
             ResolvePath = ResolvePSPath,
             WriteVerbose = WriteVerbose,
             WriteWarning = WriteWarning
@@ -259,8 +259,8 @@ public sealed class ResumeCopilotSessionCommand : AsyncPSCmdlet
     [ArgumentCompleter(typeof(CopilotAgentNameCompleter))]
     public string? DefaultAgent { get; set; }
 
-    [Parameter(HelpMessage = "Agent names to load by searching -AgentFileFolders/default agent file folders. Does not select a default agent.")]
-    [Alias("Agents")]
+    [Parameter(HelpMessage = "Agent names to load by searching -AgentFolders/default agent folders. Does not select a default agent.")]
+    [Alias("AgentNames", "Agents")]
     [ArgumentCompleter(typeof(CopilotAgentNameCompleter))]
     public string[]? Agent { get; set; }
 
@@ -272,8 +272,8 @@ public sealed class ResumeCopilotSessionCommand : AsyncPSCmdlet
     public string[]? CustomAgentFile { get; set; }
 
     [Parameter(HelpMessage = "Ordered directories used to discover custom agents by name. Defaults to the repository .github/agents directory first, then ~/.copilot/agents.")]
-    [Alias("AgentFileFolder", "AgentPath", "AgentPaths")]
-    public string[]? AgentFileFolders { get; set; }
+    [Alias("AgentFolder", "AgentFileFolder", "AgentFileFolders", "AgentPath", "AgentPaths")]
+    public string[]? AgentFolders { get; set; }
 
     [Parameter(HelpMessage = "One or more directories to discover skills from. Passing any directory enables skills for the resumed session.")]
     [Alias("SkillDirectories")]
@@ -288,10 +288,10 @@ public sealed class ResumeCopilotSessionCommand : AsyncPSCmdlet
         var config = new ResumeSessionConfig();
         config.OnPermissionRequest = PermissionHandler.ApproveAll;
 
-        var agentFileFoldersWereSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(AgentFileFolders));
-        var agentFileFolders = agentFileFoldersWereSpecified
-            ? AgentFileFolders
-            : AgentDiscovery.GetDefaultAgentFileFolders(ResolvePSPath(".")).ToArray();
+        var agentFoldersWereSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(AgentFolders));
+        var agentFolders = agentFoldersWereSpecified
+            ? AgentFolders
+            : AgentDiscovery.GetDefaultAgentFolders(ResolvePSPath(".")).ToArray();
 
         var setupResult = SessionSetupHelper.ConfigureResume(config, new SessionSetupOptions
         {
@@ -301,8 +301,8 @@ public sealed class ResumeCopilotSessionCommand : AsyncPSCmdlet
             DisabledSkills = DisabledSkill,
             AgentNames = Agent,
             DefaultAgent = DefaultAgent,
-            AgentFileFolders = agentFileFolders,
-            AgentFileFoldersWereSpecified = agentFileFoldersWereSpecified,
+            AgentFolders = agentFolders,
+            AgentFoldersWereSpecified = agentFoldersWereSpecified,
             ResolvePath = ResolvePSPath,
             WriteVerbose = WriteVerbose,
             WriteWarning = WriteWarning

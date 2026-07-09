@@ -50,7 +50,7 @@ The agent is resolved in priority order:
 2. **Prompt file frontmatter** — if `-PromptFile` has `agent: 'my-agent'` in its YAML frontmatter
 3. **No agent** — if neither is set, the session runs without a named agent
 
-Agent files are discovered by CopilotShell, not by this script. `Invoke-CopilotTask.ps1` uses the default search paths: the repository `.github/agents` directory first, then `~/.copilot/agents`, with earlier paths winning on name conflicts. Use `-Agent` (`-Agents`) to load named agents without selecting one.
+Agent files are discovered by CopilotShell, not by this script. `Invoke-CopilotTask.ps1` uses the default search paths: the repository `.github/agents` directory first, then `~/.copilot/agents`, with earlier paths winning on name conflicts. Use `-Agent` (`-AgentNames`/`-Agents`) to load named agents without selecting one, and `-AgentFolders` to override the ordered discovery folders.
 
 You can also pass explicit agent file paths with `-AgentFile`.
 
@@ -125,7 +125,8 @@ The prompt is generic and reusable. The wrapper injects run-specific context via
 | `-PromptFile` | string | Path to a `.prompt.md` file |
 | `-Name` | string | Run name — output goes to `.copilot_runs/<Name>/` |
 | `-DefaultAgent` | string | Default agent name to select |
-| `-Agent` | string[] | Agent names to load without selecting a default agent (`-Agents` alias) |
+| `-Agent` | string[] | Agent names to load without selecting a default agent (`-AgentNames`/`-Agents` aliases) |
+| `-AgentFolders` | string[] | Ordered folders for resolving named agents (defaults to `.github/agents`, then `~/.copilot/agents`) |
 | `-AgentFile` | string[] | Explicit `.agent.md` files to load |
 | `-Model` | string | Model to use (default: `claude-opus-4.6`) |
 | `-RunOnce` | switch | Skip if previous run succeeded with same `-Version` |

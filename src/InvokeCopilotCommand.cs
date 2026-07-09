@@ -101,8 +101,8 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
     [ArgumentCompleter(typeof(CopilotAgentNameCompleter))]
     public string? DefaultAgent { get; set; }
 
-    [Parameter(HelpMessage = "Agent names to load by searching -AgentFileFolders/default agent file folders. Does not select a default agent.")]
-    [Alias("Agents")]
+    [Parameter(HelpMessage = "Agent names to load by searching -AgentFolders/default agent folders. Does not select a default agent.")]
+    [Alias("AgentNames", "Agents")]
     [ArgumentCompleter(typeof(CopilotAgentNameCompleter))]
     public string[]? Agent { get; set; }
 
@@ -114,8 +114,8 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
     public string[]? CustomAgentFile { get; set; }
 
     [Parameter(HelpMessage = "Ordered directories used to discover custom agents by name. Defaults to the repository .github/agents directory first, then ~/.copilot/agents.")]
-    [Alias("AgentFileFolder", "AgentPath", "AgentPaths")]
-    public string[]? AgentFileFolders { get; set; }
+    [Alias("AgentFolder", "AgentFileFolder", "AgentFileFolders", "AgentPath", "AgentPaths")]
+    public string[]? AgentFolders { get; set; }
 
     [Parameter(HelpMessage = "Path to a .prompt.md file (VS Code compatible). Contains frontmatter with optional 'agent' and 'description' fields, and a body used as the prompt text. Explicit -Prompt and -DefaultAgent override values from the file.")]
     public string? PromptFile { get; set; }
@@ -219,10 +219,10 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
         // Auto-approve tool permission requests using the SDK's built-in handler
         sessionConfig.OnPermissionRequest = PermissionHandler.ApproveAll;
 
-        var agentFileFoldersWereSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(AgentFileFolders));
-        var agentFileFolders = agentFileFoldersWereSpecified
-            ? AgentFileFolders
-            : AgentDiscovery.GetDefaultAgentFileFolders(ResolvePSPath(".")).ToArray();
+        var agentFoldersWereSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(AgentFolders));
+        var agentFolders = agentFoldersWereSpecified
+            ? AgentFolders
+            : AgentDiscovery.GetDefaultAgentFolders(ResolvePSPath(".")).ToArray();
 
         var setupResult = await SessionSetupHelper.ConfigureAsync(sessionConfig, new SessionSetupOptions
         {
@@ -238,8 +238,8 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
             AgentNames = Agent,
             DefaultAgent = DefaultAgent,
             DefaultAgentWasSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(DefaultAgent)),
-            AgentFileFolders = agentFileFolders,
-            AgentFileFoldersWereSpecified = agentFileFoldersWereSpecified,
+            AgentFolders = agentFolders,
+            AgentFoldersWereSpecified = agentFoldersWereSpecified,
             PromptFileAgent = promptFileResult?.Agent,
             ResolvePath = ResolvePSPath,
             WriteVerbose = WriteVerbose,
@@ -281,7 +281,7 @@ public sealed class InvokeCopilotCommand : AsyncPSCmdlet
         var done = new TaskCompletionSource();
         string? lastAssistantContent = null;
         int turnCount = 0;
-        
+
         // Capture the SynchronizationContext to marshal WriteObject calls back to the pipeline thread
         var syncContext = SynchronizationContext.Current;
 
