@@ -265,6 +265,20 @@ internal static class TestMcpServerHelper
     }
 
     /// <summary>
+    /// Initializes the session tool catalog and returns the exact model-facing
+    /// names from runtime metadata, without relying on an LLM to report them.
+    /// </summary>
+    public static async Task<string> GetCurrentToolNamesAsync(CopilotSession session)
+    {
+        await session.Rpc.Tools.InitializeAndValidateAsync();
+        var metadata = await session.Rpc.Tools.GetCurrentMetadataAsync();
+        if (metadata.Tools is null)
+            throw new InvalidOperationException("Runtime did not return initialized tool metadata.");
+
+        return string.Join(",", metadata.Tools.Select(tool => tool.Name));
+    }
+
+    /// <summary>
     /// The standard prompt used to ask the model to list its tools.
     /// </summary>
     public const string ListToolsPrompt =

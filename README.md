@@ -16,7 +16,6 @@ A cross-platform PowerShell 7+ module that wraps the [GitHub Copilot SDK](https:
 
 ## Known limitations
 1. ~~mcp env args dont work~~ — **Workaround implemented:** all local MCP servers are automatically launched through `mcp-wrapper`, which handles env var propagation and persistent "zombie" daemon connections for eligible servers. Use `-NoMcpWrapper` to disable. See [github/copilot-sdk#163](https://github.com/github/copilot-sdk/issues/163) and [MCP-WRAPPER.md](MCP-WRAPPER.md).
-1. Have a hack to load MCPs to get their name for filtering
 
 ## Quick Install
 
@@ -190,25 +189,34 @@ discovery folders, and `-DefaultAgent` to select the session's starting agent.
 VS Code `.vscode/mcp.json` `servers` JSON; files are merged in order, and duplicate
 server names keep the first definition.
 
-`-AvailableTools` restricts which tools a session can use. Names are passed to the
-Copilot CLI **verbatim** — there is no dynamic MCP discovery and no slash/dash
-normalization, so the selector format matters:
+`-AvailableTools` restricts which tools a session can use. Selectors are passed to the
+Copilot runtime verbatim. SDK 1.0.11 / runtime 1.0.79 supports:
 
-- **Session level** (`-AvailableTools`): MCP tools must be listed with their **dashed
-  explicit** names (e.g. `ado-wiki_get_page`). Wildcards, bare server names, and the
-  slash form are **not** expanded at the session level.
-- **Agent level** (`CustomAgentConfig.Tools` / `.agent.md` `tools:`): scope an agent to an
-  MCP server with the namespaced **slash** form — `ado/*` (all tools) or `ado/wiki_get_page`
-  (one tool). The dashed form is **not** matched here.
-- **Built-in CLI tools** (`view`, `edit`, `grep`, ...): passed through as-is at either level.
+- **Source-qualified selectors:** `builtin:view`, `builtin:*`, `mcp:ado-wiki_get_page`,
+  `mcp:*`, `custom:my_tool`, and `custom:*`. These are preferred when the source boundary
+  matters because a tool from another source cannot match by name collision.
+- **MCP server selectors:** `ado` or `ado/*` selects every tool from that server;
+  `ado/wiki_get_page` selects one namespaced tool. Exact dashed wire names such as
+  `ado-wiki_get_page` also work.
+- **Legacy dash globs are literals:** `ado-*` is not a wildcard. Use `ado/*` for one
+  server or `mcp:*` for all MCP tools.
+- **Agent level** (`CustomAgentConfig.Tools` / `.agent.md` `tools:`): this uses a separate
+  alias grammar. Exact built-in or dashed wire names, bare MCP server names, `ado/*`, and
+  `ado/wiki_get_page` work. Source-qualified forms such as `mcp:*` are session-only.
+  Prefer the slash forms because they preserve the MCP namespace.
 
 A session-level restriction is a **hard cap**: it cascades to every agent (and any subagent
 spawned via `task`). An agent can only ever *narrow* the session's tool set, never widen it.
 
 ```powershell
-# Restrict a session to specific MCP tools + a couple of builtins
+# Restrict a session to specific MCP tools + a builtin
 Invoke-Copilot "Search the wiki" `
-    -AvailableTools @('ado-wiki_get_page', 'ado-wiki_search', 'view') `
+    -AvailableTools @('ado/wiki_get_page', 'ado/wiki_search', 'builtin:view') `
+    -McpConfigFile ./mcp-config.json
+
+# Allow every MCP tool, but no built-in or custom tools
+Invoke-Copilot "Use the connected services" `
+    -AvailableTools @('mcp:*') `
     -McpConfigFile ./mcp-config.json
 
 # Scope via an agent instead (slash form, wildcard supported)
@@ -227,6 +235,8 @@ planning/prompting tools). `send_inbox` and `context_board` are **kept** so the 
 participate in the inbox / dynamic-context-board machinery. The result is an
 orchestration-focused default (`task`, `read_agent`, `write_agent`, `list_agents`,
 `task_complete`, `send_inbox`, `context_board`, `skill`) with **no** file/shell/repo/MCP tools.
+CopilotShell emits these as `builtin:`-qualified selectors so an MCP or custom tool with the same
+name cannot cross the isolation boundary.
 
 ```powershell
 # Default agent restricted to the isolated builtin tools

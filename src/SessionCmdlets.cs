@@ -49,13 +49,13 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
     [Parameter(HelpMessage = "System message mode: Append or Replace.")]
     public SystemMessageMode SystemMessageMode { get; set; } = SystemMessageMode.Append;
 
-    [Parameter(HelpMessage = "List of tool names to allow.")]
+    [Parameter(HelpMessage = "Tool selectors to allow, such as builtin:view, mcp:*, ado/*, or an exact wire name.")]
     public string[]? AvailableTools { get; set; }
 
     [Parameter(HelpMessage = "When no agent is specified, restrict the (built-in) default agent to an isolated builtin tool set: BuiltInTools.Isolated minus exit_plan_mode and ask_user (send_inbox and context_board are kept). Ignored if an agent is specified.")]
     public SwitchParameter IsolatedDefaultAgent { get; set; }
 
-    [Parameter(HelpMessage = "List of tool names to exclude.")]
+    [Parameter(HelpMessage = "Tool selectors to exclude, such as builtin:powershell, mcp:*, or ado/write_page.")]
     public string[]? ExcludedTools { get; set; }
 
     [Parameter(HelpMessage = "One or more directories to discover skills from. Passing any directory enables skills for the session.")]
@@ -125,7 +125,7 @@ public sealed class NewCopilotSessionCommand : AsyncPSCmdlet
             ? AgentFolders
             : AgentDiscovery.GetDefaultAgentFolders(ResolvePSPath(".")).ToArray();
 
-        await SessionSetupHelper.ConfigureAsync(config, new SessionSetupOptions
+        SessionSetupHelper.Configure(config, new SessionSetupOptions
         {
             CustomAgents = CustomAgents,
             CustomAgentFiles = CustomAgentFile,

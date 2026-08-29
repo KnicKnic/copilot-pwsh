@@ -1,11 +1,11 @@
 // ============================================================================
-// Test: MCP server with session AvailableTools = ["test-mcp-*"] (dash wildcard)
+// Compatibility: AvailableTools = ["test-mcp-*"] is not a wildcard
 // ============================================================================
 //
 // Attaches a local test MCP server and sets SessionConfig.AvailableTools to
-// the dash-form wildcard (test-mcp-*). At the session level no wildcard form is
-// honored (neither test-mcp-* nor test-mcp/*) — only explicit dashed tool names
-// (test-mcp-alpha, ...) are matched — so the MCP tools are NOT exposed.
+// the legacy dash-glob form (test-mcp-*). The filter grammar treats it as a
+// literal tool name, so it must not expose MCP tools. Use test-mcp/* for one
+// server or mcp:* for every MCP tool.
 //
 // Run:  dotnet run -- McpToolSpecified
 // ============================================================================
@@ -14,9 +14,9 @@ using GitHub.Copilot;
 
 public class McpToolSpecified : IBugRepro
 {
-    public bool ExpectsFail => true;
+    public bool ExpectsFail => false;
     public string Description =>
-        "MCP server with session AvailableTools = [\"test-mcp-*\"] (dash wildcard): tools NOT exposed";
+        "Legacy dash glob is a literal and does not expose MCP tools";
 
     public async Task<int> RunAsync(string cliPath)
     {
@@ -52,15 +52,27 @@ public class McpToolSpecified : IBugRepro
         Console.WriteLine("Session created.");
         Console.WriteLine();
 
-        Console.WriteLine("Asking model to list all its tools...");
-        var response = await TestMcpServerHelper.QueryAsync(session, TestMcpServerHelper.ListToolsPrompt);
+        Console.WriteLine("Reading resolved tool metadata from the runtime...");
+        var response = await TestMcpServerHelper.GetCurrentToolNamesAsync(session);
 
         Console.WriteLine();
-        Console.WriteLine("--- Model Response ---");
+        Console.WriteLine("--- Resolved Tools ---");
         Console.WriteLine(response);
-        Console.WriteLine("--- End Response ---");
+        Console.WriteLine("--- End Tools ---");
         Console.WriteLine();
 
-        return TestMcpServerHelper.ValidateToolResponse(response, TestMcpServerHelper.PrefixedToolNames);
+        var exposed = TestMcpServerHelper.ValidateToolResponse(response, TestMcpServerHelper.PrefixedToolNames) == 0;
+        if (!exposed)
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("Dash glob correctly matched no MCP tools.");
+            Console.ResetColor();
+            return 0;
+        }
+
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine("Dash glob unexpectedly exposed MCP tools.");
+        Console.ResetColor();
+        return 1;
     }
 }
