@@ -5,9 +5,8 @@
 //
 // Attaches a local test MCP server and sets SessionConfig.AvailableTools to the
 // explicit namespaced (slash) tool names (test-mcp/alpha, test-mcp/beta,
-// test-mcp/gamma). At the session level only the dashed explicit names
-// (test-mcp-alpha, ...) are honored, so the slash form does NOT expose the MCP
-// tools. (The slash form works at the agent level, but not here.)
+// test-mcp/gamma). The runtime paired with SDK 1.0.11 resolves these selectors
+// against MCP server and leaf-tool metadata.
 //
 // Run:  dotnet run -- McpToolExplicitNamespaced
 // ============================================================================
@@ -16,9 +15,9 @@ using GitHub.Copilot;
 
 public class McpToolExplicitNamespaced : IBugRepro
 {
-    public bool ExpectsFail => true;
+    public bool ExpectsFail => false;
     public string Description =>
-        "MCP server with session AvailableTools = [\"test-mcp/alpha\", ...] (namespaced explicit): tools NOT exposed";
+        "MCP server with session AvailableTools = [\"test-mcp/alpha\", ...]: tools exposed";
 
     public async Task<int> RunAsync(string cliPath)
     {

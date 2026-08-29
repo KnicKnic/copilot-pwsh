@@ -7,13 +7,13 @@ namespace CopilotShell;
 /// <summary>
 /// Loads MCP server configurations from a JSON config file (e.g. mcp-config.json)
 /// and converts them into the SDK's <see cref="McpStdioServerConfig"/> /
-/// <see cref="McpHttpServerConfig"/> objects for <see cref="SessionConfig.McpServers"/>.
+/// <see cref="McpHttpServerConfig"/> objects for <see cref="SessionConfig"/>.
 /// </summary>
 internal static class McpConfigLoader
 {
     /// <summary>
     /// Reads a JSON config file and returns a dictionary suitable for
-    /// <see cref="SessionConfig.McpServers"/>.
+    /// assigning to a <see cref="SessionConfig"/>.
     /// </summary>
     /// <remarks>
     /// Supports two formats (auto-detected):

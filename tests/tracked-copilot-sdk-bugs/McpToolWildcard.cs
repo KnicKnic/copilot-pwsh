@@ -13,9 +13,9 @@ using GitHub.Copilot;
 
 public class McpToolWildcard : IBugRepro
 {
-    public bool ExpectsFail => true;
+    public bool ExpectsFail => false;
     public string Description =>
-        "MCP server with AvailableTools = [\"test-mcp/*\"]: wildcard should expose tools";
+        "MCP server with AvailableTools = [\"test-mcp/*\"]: server wildcard exposes tools";
 
     public async Task<int> RunAsync(string cliPath)
     {

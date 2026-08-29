@@ -3,9 +3,8 @@
 // ============================================================================
 //
 // Attaches a local test MCP server and sets SessionConfig.AvailableTools to the
-// bare server name (test-mcp) with no tool segment or wildcard. At the session
-// level only the dashed explicit names (test-mcp-alpha, ...) are honored, so the
-// bare server name does NOT expose the MCP tools.
+// bare server name (test-mcp) with no tool segment or wildcard. The runtime
+// paired with SDK 1.0.11 treats this as an MCP server selector.
 //
 // Run:  dotnet run -- McpToolServerName
 // ============================================================================
@@ -14,9 +13,9 @@ using GitHub.Copilot;
 
 public class McpToolServerName : IBugRepro
 {
-    public bool ExpectsFail => true;
+    public bool ExpectsFail => false;
     public string Description =>
-        "MCP server with session AvailableTools = [\"test-mcp\"] (bare server name): tools NOT exposed";
+        "MCP server with session AvailableTools = [\"test-mcp\"]: server tools exposed";
 
     public async Task<int> RunAsync(string cliPath)
     {

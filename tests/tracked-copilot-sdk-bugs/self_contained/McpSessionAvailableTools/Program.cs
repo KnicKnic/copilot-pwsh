@@ -1,31 +1,24 @@
 // ============================================================================
-// Self-contained repro — session AvailableTools selector forms that fail to
-// expose MCP tools (github/copilot-sdk#861)
+// Self-contained compatibility matrix — session AvailableTools MCP selectors
 // ============================================================================
 //
 // A local stdio MCP server ("test-mcp", tools: alpha/beta/gamma) is attached to
-// a session, then the model is asked to list its tools. The same MCP server is
-// tried against several SessionConfig.AvailableTools selector forms.
+// a session, then the runtime's resolved tool metadata is inspected. The same
+// MCP server is tried against several SessionConfig.AvailableTools selectors.
 //
-// At the session level the CLI only honors the explicit DASHED tool names
-// (test-mcp-alpha, ...). Every other form below fails to expose the MCP tools:
+// SDK 1.0.11 / CLI 1.0.79 supports exact wire names, bare server names,
+// namespaced exact names, slash server wildcards, and source-qualified
+// wildcards. The legacy dash glob remains a literal:
 //
-//   1. bare server name                     ["test-mcp"]              -> FAILS
-//   2. explicit namespaced / slash names    ["test-mcp/alpha", ...]   -> FAILS
-//   3. dash wildcard                        ["test-mcp-*"]            -> FAILS
-//   4. slash wildcard                       ["test-mcp/*"]            -> FAILS
+//   0. explicit dashed names                ["test-mcp-alpha", ...]   -> exposed
+//   1. bare server name                     ["test-mcp"]              -> exposed
+//   2. explicit namespaced / slash names    ["test-mcp/alpha", ...]   -> exposed
+//   3. dash wildcard                        ["test-mcp-*"]            -> not exposed
+//   4. slash wildcard                       ["test-mcp/*"]            -> exposed
+//   5. source wildcard                      ["mcp:*"]                 -> exposed
 //
-// For reference the working baseline form is also exercised:
-//
-//   0. explicit dashed names                ["test-mcp-alpha", ...]   -> works
-//
-// EXPECTED (once fixed): every form exposes test-mcp-alpha/beta/gamma.
-// ACTUAL:   only the dashed-explicit form exposes them; forms 1-4 reproduce
-//           the bug (model sees only built-in tools).
-//
-// Exit code: 0 only if EVERY bug form (1-3) now exposes the MCP tools (fully
-//            fixed); 1 while any bug form still fails (bug reproduces); 2 on a
-//            setup error.
+// Exit code: 0 when every selector behaves as documented; 1 on a mismatch;
+//            2 on a setup error.
 //
 // Run:  dotnet run                       (auto-downloads matching CLI)
 //       dotnet run -- C:\path\copilot.exe (use an explicit CLI)
@@ -54,20 +47,19 @@ await using var client = new CopilotClient(
     new CopilotClientOptions { Connection = RuntimeConnection.ForStdio(path: cliPath) });
 await client.StartAsync();
 
-// Each scenario: a label, the AvailableTools selector form, and whether it is a
-// known bug form (true) or the working baseline (false).
-var scenarios = new (string Label, string[] AvailableTools, bool IsBug)[]
+var scenarios = new (string Label, string[] AvailableTools, bool ExpectedExposed)[]
 {
-    ("explicit dashed  [test-mcp-alpha, ...]   (baseline)", McpHelper.Prefixed,         false),
-    ("bare server name [test-mcp]              (bug)",      new[] { McpHelper.ServerName },    true),
-    ("explicit slash   [test-mcp/alpha, ...]   (bug)",      McpHelper.Namespaced,       true),
-    ("dash wildcard    [test-mcp-*]            (bug)",       new[] { McpHelper.DashWildcard },  true),
-    ("slash wildcard   [test-mcp/*]            (bug)",       new[] { McpHelper.SlashWildcard }, true),
+    ("explicit dashed  [test-mcp-alpha, ...]", McpHelper.Prefixed, true),
+    ("bare server name [test-mcp]", new[] { McpHelper.ServerName }, true),
+    ("explicit slash   [test-mcp/alpha, ...]", McpHelper.Namespaced, true),
+    ("dash wildcard    [test-mcp-*] (literal)", new[] { McpHelper.DashWildcard }, false),
+    ("slash wildcard   [test-mcp/*]", new[] { McpHelper.SlashWildcard }, true),
+    ("source wildcard  [mcp:*]", new[] { McpHelper.SourceWildcard }, true),
 };
 
-var results = new List<(string Label, bool IsBug, bool Exposed)>();
+var results = new List<(string Label, bool ExpectedExposed, bool Exposed)>();
 
-foreach (var (label, availableTools, isBug) in scenarios)
+foreach (var (label, availableTools, expectedExposed) in scenarios)
 {
     Console.WriteLine("============================================================");
     Console.WriteLine($"Scenario: {label}");
@@ -82,17 +74,17 @@ foreach (var (label, availableTools, isBug) in scenarios)
     };
 
     await using var session = await client.CreateSessionAsync(sessionConfig);
-    var response = await Repro.QueryAsync(session, McpHelper.ListToolsPrompt);
-    var exposed = McpHelper.AllToolsExposed(response, McpHelper.Prefixed, out var reported, out var missing);
+    var resolvedTools = await Repro.GetCurrentToolNamesAsync(session);
+    var exposed = McpHelper.AllToolsExposed(resolvedTools, McpHelper.Prefixed, out var reported, out var missing);
 
-    Console.WriteLine($"  Reported tools ({reported.Count}): {string.Join(", ", reported)}");
+    Console.WriteLine($"  Resolved tools ({reported.Count}): {string.Join(", ", reported)}");
     if (!exposed) Console.WriteLine($"  Missing MCP tools: {string.Join(", ", missing)}");
     Console.WriteLine(exposed
         ? "  RESULT: MCP tools EXPOSED"
-        : "  RESULT: MCP tools NOT exposed (bug reproduces)");
+        : "  RESULT: MCP tools NOT exposed");
     Console.WriteLine();
 
-    results.Add((label, isBug, exposed));
+    results.Add((label, expectedExposed, exposed));
 }
 
 Console.WriteLine("==================== Summary ====================");
@@ -102,19 +94,19 @@ foreach (var r in results)
     Console.WriteLine($"  [{tag}] {r.Label}");
 }
 
-var bugForms = results.Where(r => r.IsBug).ToList();
-var stillBroken = bugForms.Where(r => !r.Exposed).ToList();
+var mismatches = results.Where(r => r.ExpectedExposed != r.Exposed).ToList();
 Console.WriteLine();
-Console.WriteLine($"Bug forms exposing MCP tools: {bugForms.Count - stillBroken.Count}/{bugForms.Count}");
+Console.WriteLine($"Selectors matching expected behavior: {results.Count - mismatches.Count}/{results.Count}");
 
-if (stillBroken.Count > 0)
+if (mismatches.Count > 0)
 {
-    Console.WriteLine("\nFAIL: the following session AvailableTools forms do NOT expose MCP tools:");
-    foreach (var r in stillBroken) Console.WriteLine($"  - {r.Label}");
+    Console.WriteLine("\nFAIL: selector behavior did not match expectations:");
+    foreach (var r in mismatches)
+        Console.WriteLine($"  - {r.Label}: expected exposed={r.ExpectedExposed}, actual={r.Exposed}");
     return 1;
 }
 
-Console.WriteLine("\nPASS: every session AvailableTools selector form now exposes the MCP tools.");
+Console.WriteLine("\nPASS: every session AvailableTools selector behaved as documented.");
 return 0;
 
 // ============================================================================
@@ -123,24 +115,14 @@ return 0;
 
 static class Repro
 {
-    public static async Task<string> QueryAsync(CopilotSession session, string prompt)
+    public static async Task<string> GetCurrentToolNamesAsync(CopilotSession session)
     {
-        var done = new TaskCompletionSource();
-        string? content = null;
-        using var sub = session.On<SessionEvent>(evt =>
-        {
-            switch (evt)
-            {
-                case AssistantMessageEvent msg: content = msg.Data.Content; break;
-                case SessionIdleEvent: done.TrySetResult(); break;
-                case SessionErrorEvent err: done.TrySetException(new Exception(err.Data.Message)); break;
-            }
-        });
-        await session.SendAsync(new MessageOptions { Prompt = prompt });
-        var completed = await Task.WhenAny(done.Task, Task.Delay(TimeSpan.FromSeconds(120)));
-        if (completed != done.Task) throw new TimeoutException("Timed out waiting for response");
-        await done.Task;
-        return content?.Trim() ?? "";
+        await session.Rpc.Tools.InitializeAndValidateAsync();
+        var metadata = await session.Rpc.Tools.GetCurrentMetadataAsync();
+        if (metadata.Tools is null)
+            throw new InvalidOperationException("Runtime did not return initialized tool metadata.");
+
+        return string.Join(",", metadata.Tools.Select(tool => tool.Name));
     }
 }
 
@@ -152,9 +134,7 @@ static class McpHelper
     public static readonly string[] Namespaced = { "test-mcp/alpha", "test-mcp/beta", "test-mcp/gamma" };
     public const string DashWildcard = "test-mcp-*";
     public const string SlashWildcard = "test-mcp/*";
-
-    public const string ListToolsPrompt =
-        "List every tool you have access to. Output ONLY the exact full internal tool identifier for each tool, as a comma-separated list. No descriptions, no categories, no markdown, no short names.";
+    public const string SourceWildcard = "mcp:*";
 
     public static string? ResolveServerProject()
     {
@@ -177,7 +157,7 @@ static class McpHelper
     };
 
     /// <summary>
-    /// Returns true if every expected MCP tool is present in the model's reply.
+    /// Returns true if every expected MCP tool is present in runtime metadata.
     /// </summary>
     public static bool AllToolsExposed(string response, IEnumerable<string> expectedTools,
         out List<string> reported, out List<string> missing)

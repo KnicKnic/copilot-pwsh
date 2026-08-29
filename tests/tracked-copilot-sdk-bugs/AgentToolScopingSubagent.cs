@@ -26,7 +26,9 @@ public class AgentToolScopingSubagent : IBugRepro
     public string Description =>
         "Subagent via task tool: restricted agent delegates to unrestricted, unrestricted should see all tools";
 
-    public async Task<int> RunAsync(string cliPath)
+    public Task<int> RunAsync(string cliPath) => RunScenarioAsync(cliPath, preselectAtCreation: false);
+
+    internal static async Task<int> RunScenarioAsync(string cliPath, bool preselectAtCreation)
     {
         var restricted = new CustomAgentConfig
         {
@@ -55,19 +57,24 @@ public class AgentToolScopingSubagent : IBugRepro
         {
             Model = "claude-haiku-4.5",
             CustomAgents = new List<CustomAgentConfig> { restricted, unrestricted },
+            Agent = preselectAtCreation ? "restricted" : null,
             OnPermissionRequest = PermissionHandler.ApproveAll,
         };
 
-        Console.WriteLine("Creating session...");
+        Console.WriteLine(preselectAtCreation
+            ? "Creating session with SessionConfig.Agent = 'restricted'..."
+            : "Creating session without a preselected agent...");
         await using var session = await client.CreateSessionAsync(sessionConfig);
         Console.WriteLine("Session created.");
         Console.WriteLine();
 
-        // Select restricted agent
-        Console.WriteLine("Selecting agent 'restricted' via Rpc.Agent.SelectAsync...");
-        await session.Rpc.Agent.SelectAsync("restricted");
-        Console.WriteLine("Agent selected.");
-        Console.WriteLine();
+        if (!preselectAtCreation)
+        {
+            Console.WriteLine("Selecting agent 'restricted' via Rpc.Agent.SelectAsync...");
+            await session.Rpc.Agent.SelectAsync("restricted");
+            Console.WriteLine("Agent selected.");
+            Console.WriteLine();
+        }
 
         // Ask restricted agent to delegate to unrestricted agent via task tool
         Console.WriteLine("Asking restricted agent to delegate to unrestricted agent via task tool...");

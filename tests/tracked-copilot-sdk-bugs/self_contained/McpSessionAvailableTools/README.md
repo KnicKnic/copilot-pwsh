@@ -1,53 +1,43 @@
 # McpSessionAvailableTools
 
-Self-contained reproduction of a **GitHub Copilot SDK** bug where MCP server
-tools are **not exposed** to the model for most `SessionConfig.AvailableTools`
-selector forms. A single program exercises the same bundled MCP server against
-every selector form and reports which ones expose the tools.
+Self-contained compatibility matrix for **GitHub Copilot SDK**
+`SessionConfig.AvailableTools` MCP selector forms.
 
 ## Scenario
 
 | | |
 |---|---|
-| **SDK** | `GitHub.Copilot.SDK` 1.0.2 |
-| **CLI** | 1.0.64-0 (auto-downloaded) |
+| **SDK** | `GitHub.Copilot.SDK` 1.0.11 |
+| **CLI** | 1.0.79 (auto-downloaded) |
 | **Model** | `claude-haiku-4.5` |
-| **Status** | ❌ Fails — bug reproduces (known) |
+| **Status** | Passes |
 
 A local stdio MCP server is bundled in [`test-mcp-server/`](test-mcp-server)
 and registered under the name `test-mcp` (tools `alpha`/`beta`/`gamma`, exposed
 by the CLI as `test-mcp-alpha`, `test-mcp-beta`, `test-mcp-gamma`).
 
-The program creates one session per `AvailableTools` selector form and asks the
-model to list its tools:
+The program creates one session per `AvailableTools` selector form and reads
+the runtime's resolved tool metadata:
 
 | # | `AvailableTools` form | Example | Result |
 |---|-----------------------|---------|--------|
 | 0 | explicit dashed names (baseline) | `["test-mcp-alpha", ...]` | ✅ exposed |
-| 1 | bare server name | `["test-mcp"]` | ❌ not exposed |
-| 2 | explicit namespaced / slash names | `["test-mcp/alpha", ...]` | ❌ not exposed |
-| 3 | dash wildcard | `["test-mcp-*"]` | ❌ not exposed |
-| 4 | slash wildcard | `["test-mcp/*"]` | ❌ not exposed |
+| 1 | bare server name | `["test-mcp"]` | ✅ exposed |
+| 2 | explicit namespaced / slash names | `["test-mcp/alpha", ...]` | ✅ exposed |
+| 3 | legacy dash glob (literal) | `["test-mcp-*"]` | ❌ not exposed |
+| 4 | slash server wildcard | `["test-mcp/*"]` | ✅ exposed |
+| 5 | source wildcard | `["mcp:*"]` | ✅ exposed |
 
-At the session level the CLI only honors the **dashed explicit** names; every
-other form fails to expose the MCP tools. (The slash form works at the **agent**
-level, but not here.)
+The runtime resolves source-qualified, server, namespaced, and exact-name
+selectors against tool metadata. A dash glob is not part of the grammar.
 
-## Expected vs actual
-
-- **Expected (once fixed):** every form exposes `test-mcp-alpha`,
-  `test-mcp-beta`, `test-mcp-gamma`.
-- **Actual:** only the dashed-explicit baseline exposes them; forms 1–3 report
-  only built-in tools.
-
-The program exits `1` while **any** of the bug forms (1–3) still fails to expose
-the MCP tools, and `0` only once every form is fixed. This way the SDK team can
-run one repro and watch each form flip to "EXPOSED" as fixes land.
+The program exits `0` when all six forms match the table, `1` on a behavior
+mismatch, and `2` on a setup error.
 
 > Related to tracked issue
 > [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861):
-> MCP server tools are not exposed via session `AvailableTools` namespaced or
-> wildcard selectors.
+> The original bug was that namespaced and server-wildcard selectors did not
+> expose MCP tools. Those forms pass on CLI/runtime 1.0.79.
 
 ## Bundled MCP server
 

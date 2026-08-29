@@ -11,14 +11,8 @@
 // This answers the open question of whether callers must rewrite "/" to "-" (or
 // vice versa) when scoping an agent to a specific MCP tool.
 //
-// EXPECTED: Only the slash form is matched at the agent level
-// RESULT:   "test-mcp/alpha" exposes the tool; "test-mcp-alpha" does NOT
-// PASS(0):  Both spellings expose the tool (would mean the asymmetry is gone)
-// FAIL(1):  Only one spelling works — currently the case (slash only)
-//
-// Tracked behavior: ExpectsFail = true because, as of the pinned CLI, the dash
-// form is not matched at the agent level, so the test returns non-zero. If the
-// dash form ever starts working, this flips to PASS and should be revisited.
+// EXPECTED: Both slash and dashed spellings expose the selected MCP tool.
+// RESULT:   Fixed in the runtime paired with SDK 1.0.11.
 //
 // Run:  dotnet run -- McpToolAgentScopedSlashVsDash
 // ============================================================================
@@ -27,9 +21,9 @@ using GitHub.Copilot;
 
 public class McpToolAgentScopedSlashVsDash : IBugRepro
 {
-    public bool ExpectsFail => true;
+    public bool ExpectsFail => false;
     public string Description =>
-        "Agent Tools single MCP tool: only the slash form (test-mcp/alpha) is matched; the dash form (test-mcp-alpha) is not";
+        "Agent Tools single MCP tool: slash and dashed selector forms both work";
 
     private const string TargetTool = "test-mcp-alpha"; // form the model reports back
 

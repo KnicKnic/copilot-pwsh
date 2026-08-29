@@ -12,7 +12,7 @@ Standalone .NET 8 console app that reproduces and tracks bugs in the [GitHub Cop
 # Download the correct CLI version (matched to the pinned SDK)
 dotnet run -- --download
 
-# Run all known-failing tests (default)
+# Run all known-failing tests (currently none on the pinned release)
 dotnet run
 
 # Run all tests (passing + failing)
@@ -35,16 +35,18 @@ dotnet run -- --list
 | **AgentToolScopingPostSelect** | No | Agent selected post-creation via `Rpc.Agent.SelectAsync()` — `CustomAgentConfig.Tools` correctly restricts tool visibility. |
 | **AgentToolScopingSessionAgent** | No | Agent pre-selected via `SessionConfig.Agent` — `CustomAgentConfig.Tools` correctly restricts tool visibility. Fixed in `0.2.2-preview.0`. |
 | **AgentToolScopingSubagent** | No | Restricted agent delegates to unrestricted agent via the `task` tool — validates that subagent delegation correctly switches tool scope. |
+| **AgentToolScopingDefaultSubagent** | No | Restricted agent preselected through `SessionConfig.Agent` delegates to an unrestricted subagent — validates the `-DefaultAgent` orchestration path end to end. |
 | **McpToolDiscovery** | No | Attaches an MCP server to a session and checks that its tools become visible to the model. Fixed in `0.2.2-preview.0`. |
 | **McpToolExplicit** | No | MCP server with explicit dashed tool names (`test-mcp-alpha`, ...) in session `AvailableTools` — tools correctly exposed. Fixed in `0.2.2-preview.0`. |
-| **McpToolExplicitNamespaced** | Yes | Session `AvailableTools = ["test-mcp/alpha", ...]` (namespaced/slash explicit names) — MCP tools are NOT exposed (slash form only matches at the agent level). |
-| **McpToolServerName** | Yes | Session `AvailableTools = ["test-mcp"]` (bare server name) — MCP tools are NOT exposed. |
-| **McpToolSpecified** | Yes | Same as McpToolDiscovery but sets session `AvailableTools = ["test-mcp-*"]` (dash wildcard) — MCP tools are NOT exposed (no wildcard form works at the session level). |
-| **McpToolWildcard** | Yes | Same as McpToolDiscovery but sets session `AvailableTools = ["test-mcp/*"]` (slash wildcard) — MCP tools are NOT exposed. |
+| **McpToolExplicitNamespaced** | No | Session `AvailableTools = ["test-mcp/alpha", ...]` resolves namespaced MCP tools. Fixed by CLI/runtime 1.0.79. |
+| **McpToolServerName** | No | Session `AvailableTools = ["test-mcp"]` exposes that server's tools. Fixed by CLI/runtime 1.0.79. |
+| **McpToolSpecified** | No | Confirms `test-mcp-*` is a literal, not a supported wildcard; use `test-mcp/*` or `mcp:*`. |
+| **McpToolWildcard** | No | Session `AvailableTools = ["test-mcp/*"]` exposes every tool from that MCP server. Fixed by CLI/runtime 1.0.79. |
+| **McpToolSourceWildcard** | No | SDK `ToolSet().AddMcp("*")` emits `mcp:*`, exposing MCP tools without admitting built-in/custom name collisions. |
 | **McpToolAgentScoped** | No | Agent with `Tools = ["test-mcp/*"]` (wildcard) selected via `Rpc.Agent.SelectAsync` — MCP tools correctly exposed through the agent's tool scope. |
 | **McpToolAgentScopedExplicit** | No | Agent with explicit namespaced tool names (`test-mcp/alpha`, ...) — MCP tools correctly exposed. |
 | **McpToolAgentScopedExplicitSession** | No | Agent with namespaced tool names (`test-mcp/alpha`, ...) + session `AvailableTools` with dashed names — MCP tools correctly exposed. |
-| **McpToolAgentScopedSlashVsDash** | Yes | Agent `Tools = ["test-mcp/alpha"]` (slash) vs `["test-mcp-alpha"]` (dash) for a single MCP tool — only the **slash** form is matched at the agent level; the dash form is not. Confirms agent MCP selectors must use `<server>/tool` (or `<server>/*`). |
+| **McpToolAgentScopedSlashVsDash** | No | Agent `Tools` accepts both `test-mcp/alpha` and the exact wire name `test-mcp-alpha`. Fixed by CLI/runtime 1.0.79. |
 | **UnrestrictedToolsTwoMcp** | No | Two MCP servers (`mcp1`, `mcp2`), no agent/`AvailableTools` restriction — control test confirming an unrestricted session sees tools from **both** servers. |
 | **AgentScopedDefaultMcpTwoMcp** | No | Two MCP servers (`mcp1`, `mcp2`) with a default agent (`SessionConfig.Agent`) scoped to `mcp1/*` (+ `task`) — agent sees `mcp1` tools but **not** `mcp2` tools (other server hidden by scope). |
 
@@ -53,8 +55,15 @@ dotnet run -- --list
 | Issue | Description | Tests |
 |-------|-------------|-------|
 | [github/copilot-sdk#859](https://github.com/github/copilot-sdk/issues/859) | Agent pre-selected via `SessionConfig.Agent` did not enforce `CustomAgentConfig.Tools` | AgentToolScopingSessionAgent |
-| [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) | Agent `Tools` entries using bare MCP server names are not expanded to MCP tools (resolved by using the namespaced `test-mcp/*` / `test-mcp/alpha` form) | McpToolAgentScoped, McpToolAgentScopedExplicit, McpToolAgentScopedExplicitSession |
-| [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861) | MCP server tools not exposed via session `AvailableTools` for any non-dashed-explicit form (bare server name `test-mcp`, namespaced `test-mcp/alpha`, dash wildcard `test-mcp-*`, or slash wildcard `test-mcp/*`) | McpToolServerName, McpToolExplicitNamespaced, McpToolSpecified, McpToolWildcard |
+| [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) | Agent MCP selectors did not consistently resolve server/namespaced/exact forms. Fixed by CLI/runtime 1.0.79. | McpToolAgentScoped, McpToolAgentScopedExplicit, McpToolAgentScopedSlashVsDash |
+| [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861) | Session MCP selectors did not expose tools for bare server, namespaced, or server-wildcard forms. Fixed by CLI/runtime 1.0.79; dash globs remain unsupported by design. | McpToolServerName, McpToolExplicitNamespaced, McpToolWildcard, McpToolSpecified |
+
+> **2026-08-28:** Retested on SDK `1.0.11` / required CLI `1.0.79`:
+> - Bare server names, namespaced exact names, and slash server wildcards now work at the session level.
+> - Exact dashed wire names now work at both session and agent levels.
+> - The SDK's `ToolSet` emits source-qualified selectors (`builtin:*`, `mcp:*`, `custom:*`) so filters can enforce provenance rather than relying only on names.
+> - `test-mcp-*` is not part of the filter grammar and is treated as a literal. Use `test-mcp/*` for one server or `mcp:*` for all MCP tools.
+> - The historical failures below remain as a record of the behavior on older SDK/runtime pairs.
 
 > **2026-06-19:** Adopted the SDK team's namespaced-selector guidance and mapped
 > out where each selector form works. MCP tools are matched by their namespaced

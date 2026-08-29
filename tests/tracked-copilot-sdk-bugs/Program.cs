@@ -150,6 +150,13 @@ else if (!runAll)
 
 if (repros.Count == 0)
 {
+    if (selectedNames.Count == 0 && !runAll && !runPassing)
+    {
+        Console.WriteLine("No known-failing bug repros remain on the pinned SDK/runtime.");
+        Console.WriteLine("Use --all to run the compatibility matrix.");
+        return 0;
+    }
+
     Console.WriteLine($"No matching bug repros found for: {string.Join(", ", selectedNames)}");
     Console.WriteLine("Use --list to see available repros.");
     return 2;

@@ -36,7 +36,7 @@ internal sealed class SessionSetupResult
 /// <para>There are two entry points that share a common configuration core but differ in how the
 /// selected agent is applied:</para>
 /// <list type="bullet">
-///   <item><see cref="ConfigureAsync"/> — for <b>creating</b> a session (<see cref="SessionConfig"/>).
+///   <item><see cref="Configure"/> — for <b>creating</b> a session (<see cref="SessionConfig"/>).
 ///   The agent (from <c>-DefaultAgent</c> or a prompt file) is <i>pre-selected</i> by setting
 ///   <see cref="SessionConfigBase.Agent"/> before the session is created. A sole custom agent is
 ///   never auto-selected.</item>
@@ -67,14 +67,15 @@ internal sealed class SessionSetupResult
 /// </summary>
 internal static class SessionSetupHelper
 {
-    // The isolated default agent's tool set: BuiltInTools.Isolated minus exit_plan_mode/ask_user.
+    // The isolated default agent's source-qualified tool set: BuiltInTools.Isolated minus exit_plan_mode/ask_user.
     //   exit_plan_mode / ask_user are interactive planning/prompting tools that don't make sense
     //   for an unattended default agent. send_inbox / context_board are intentionally KEPT so the
     //   default agent can still participate in the inbox / dynamic-context-board machinery.
     private static readonly string[] IsolatedDefaultAgentExcluded = { "exit_plan_mode", "ask_user" };
 
     private static readonly IReadOnlyList<string> IsolatedDefaultAgentTools =
-        BuiltInTools.Isolated.Where(t => !IsolatedDefaultAgentExcluded.Contains(t, StringComparer.Ordinal)).ToList();
+        new ToolSet().AddBuiltIn(
+            BuiltInTools.Isolated.Where(t => !IsolatedDefaultAgentExcluded.Contains(t, StringComparer.Ordinal)));
 
     private static void AddTools(List<string> target, IEnumerable<string> tools)
     {
@@ -112,10 +113,9 @@ internal static class SessionSetupHelper
         }
     }
 
-    public static Task<SessionSetupResult> ConfigureAsync(
+    public static SessionSetupResult Configure(
         SessionConfig sessionConfig,
-        SessionSetupOptions options,
-        CancellationToken cancellationToken = default)
+        SessionSetupOptions options)
     {
         var allAgents = RegisterAgents(sessionConfig, options);
 
@@ -134,17 +134,17 @@ internal static class SessionSetupHelper
             options.WriteVerbose($"Pre-selecting agent: {agentToSelect}");
         }
 
-        return Task.FromResult(new SessionSetupResult
+        return new SessionSetupResult
         {
             AgentToSelect = agentToSelect,
             SelectedAgent = selectedAgent
-        });
+        };
     }
 
     /// <summary>
     /// Configures a <see cref="ResumeSessionConfig"/> for resuming a session. Applies the shared
     /// configuration core (custom agents, MCP servers, tool filters, skills) but — unlike
-    /// <see cref="ConfigureAsync"/> — does NOT pre-set <see cref="SessionConfigBase.Agent"/>. The
+    /// <see cref="Configure"/> — does NOT pre-set <see cref="SessionConfigBase.Agent"/>. The
     /// resolved agent name is returned via <see cref="SessionSetupResult.AgentToSelect"/> so the
     /// caller can apply it after resume through <c>session.Rpc.Agent.SelectAsync</c>. An agent is
     /// selected only when explicitly requested via <c>-DefaultAgent</c>; a sole loaded custom agent is
@@ -174,7 +174,7 @@ internal static class SessionSetupHelper
     }
 
     /// <summary>
-    /// Shared core used by both <see cref="ConfigureAsync"/> and <see cref="ConfigureResume"/>:
+    /// Shared core used by both <see cref="Configure"/> and <see cref="ConfigureResume"/>:
     /// attaches MCP servers, applies the session-level tool filter, sets excluded tools, and
     /// applies skills onto any <see cref="SessionConfigBase"/>.
     /// </summary>
@@ -257,7 +257,7 @@ internal static class SessionSetupHelper
     /// <summary>
     /// Applies the session-level tool filter. The session inherits ALL tools unless one of these is set:
     /// <list type="bullet">
-    ///   <item><c>-AvailableTools</c> — an explicit allow-list (passed verbatim, no expansion).</item>
+    ///   <item><c>-AvailableTools</c> — explicit runtime selectors passed verbatim.</item>
     ///   <item><c>-IsolatedDefaultAgent</c> — when NO agent is selected, restrict the (built-in) default
     ///   agent to the isolated builtin set minus <c>exit_plan_mode</c>/<c>ask_user</c>.</item>
     /// </list>
