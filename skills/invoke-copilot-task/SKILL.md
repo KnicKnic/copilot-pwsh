@@ -128,13 +128,15 @@ The prompt is generic and reusable. The wrapper injects run-specific context via
 | `-Agent` | string[] | Agent names to load without selecting a default agent (`-AgentNames`/`-Agents` aliases) |
 | `-AgentFolders` | string[] | Ordered folders for resolving named agents (defaults to `.github/agents`, then `~/.copilot/agents`) |
 | `-AgentFile` | string[] | Explicit `.agent.md` files to load |
-| `-Model` | string | Model to use (default: `claude-opus-4.6`) |
+| `-Model` | string | Model ID passed unchanged to Copilot (default: `claude-opus-4.6`); no hardcoded allowlist |
 | `-RunOnce` | switch | Skip if previous run succeeded with same `-Version` |
 | `-Check` | switch | Return `$true`/`$false` without running |
 | `-Version` | string | Version tag for idempotent run tracking |
 | `-AdditionalPrompts` | string[] | Follow-up prompts in the same session |
 | `-promptSuccessYesNoQuestion` | string | Yes/no question to determine success |
 | `-McpConfigFile` | string[] | MCP config paths (default: `.mcp.json`, `~/.copilot/mcp-config.json`; `-McpConfigFiles` and `-McpConfigSource` aliases) |
+
+Model availability is determined by the Copilot runtime and your account, not by the script. New model IDs can be supplied without updating the script; unsupported IDs are reported by Copilot.
 
 ## Run Output
 
