@@ -25,6 +25,12 @@ Install-Module CopilotShell
 
 The Copilot CLI binary is **automatically downloaded** on first use — no manual setup needed. It's cached in your user profile so subsequent runs start instantly.
 
+> **Corporate npm registries:** the download honours your npm configuration, so a mirrored registry works without extra setup. The registry is resolved from `npm_config_registry`/`NPM_CONFIG_REGISTRY`, then your user `.npmrc`, then the global `.npmrc` — falling back to `https://registry.npmjs.org`. A scoped `@github:registry` entry takes precedence over a plain `registry` entry, as in npm. To override explicitly:
+> ```powershell
+> $env:COPILOTSHELL_NPM_REGISTRY = 'https://your-mirror.example.com/npm'
+> ```
+> A project-local `.npmrc` is intentionally ignored at runtime, since the registry decides where an executable is downloaded from. Builds from source resolve the same settings (plus the repository's own `.npmrc`) via [`Directory.Build.props`](Directory.Build.props).
+
 > **First-run setup:** Authenticate with GitHub before first use:
 > ```powershell
 > Connect-Copilot

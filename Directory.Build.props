@@ -1,0 +1,66 @@
+<Project>
+
+  <!--
+    Resolve the npm registry used to download the Copilot CLI binary.
+
+    The GitHub.Copilot.SDK build target fetches the CLI tarball with MSBuild's
+    DownloadFile task, which never consults npm. Without this file the download
+    always goes to registry.npmjs.org, which fails on networks that only allow a
+    corporate npm mirror.
+
+    Precedence (highest first):
+      1. CopilotNpmRegistryUrl already set (e.g. -p:CopilotNpmRegistryUrl=...)
+      2. COPILOTSHELL_NPM_REGISTRY environment variable
+      3. NPM_CONFIG_REGISTRY / npm_config_registry environment variable
+      4. .npmrc files: repository, then user, then global
+    A scoped "@github:registry" entry wins over a plain "registry" entry, as npm does.
+
+    Falls back to the SDK default (registry.npmjs.org) when nothing is configured.
+  -->
+
+  <PropertyGroup>
+    <CopilotNpmRegistryUrl Condition="'$(CopilotNpmRegistryUrl)' == '' And '$(COPILOTSHELL_NPM_REGISTRY)' != ''">$(COPILOTSHELL_NPM_REGISTRY)</CopilotNpmRegistryUrl>
+    <CopilotNpmRegistryUrl Condition="'$(CopilotNpmRegistryUrl)' == '' And '$(NPM_CONFIG_REGISTRY)' != ''">$(NPM_CONFIG_REGISTRY)</CopilotNpmRegistryUrl>
+  </PropertyGroup>
+
+  <!-- Locate the .npmrc files npm itself would read. -->
+  <PropertyGroup Condition="'$(CopilotNpmRegistryUrl)' == ''">
+    <_CopilotNpmrcRepo>$(MSBuildThisFileDirectory).npmrc</_CopilotNpmrcRepo>
+
+    <_CopilotNpmrcUser Condition="'$(NPM_CONFIG_USERCONFIG)' != ''">$(NPM_CONFIG_USERCONFIG)</_CopilotNpmrcUser>
+    <_CopilotNpmrcUser Condition="'$(_CopilotNpmrcUser)' == ''">$([System.Environment]::GetFolderPath(SpecialFolder.UserProfile))/.npmrc</_CopilotNpmrcUser>
+
+    <_CopilotNpmrcGlobal Condition="'$(NPM_CONFIG_GLOBALCONFIG)' != ''">$(NPM_CONFIG_GLOBALCONFIG)</_CopilotNpmrcGlobal>
+    <_CopilotNpmrcGlobal Condition="'$(_CopilotNpmrcGlobal)' == '' And '$(NPM_CONFIG_PREFIX)' != ''">$(NPM_CONFIG_PREFIX)/etc/npmrc</_CopilotNpmrcGlobal>
+  </PropertyGroup>
+
+  <!--
+    Concatenate the files in precedence order and take the first match, so a
+    higher-precedence file naturally wins. The %0A separators also guarantee the
+    combined text is never empty, which keeps the Regex calls below well-formed.
+  -->
+  <PropertyGroup Condition="'$(CopilotNpmRegistryUrl)' == ''">
+    <_CopilotNpmrcRepoText Condition="Exists('$(_CopilotNpmrcRepo)')">$([System.IO.File]::ReadAllText('$(_CopilotNpmrcRepo)'))</_CopilotNpmrcRepoText>
+    <_CopilotNpmrcUserText Condition="Exists('$(_CopilotNpmrcUser)')">$([System.IO.File]::ReadAllText('$(_CopilotNpmrcUser)'))</_CopilotNpmrcUserText>
+    <_CopilotNpmrcGlobalText Condition="'$(_CopilotNpmrcGlobal)' != '' And Exists('$(_CopilotNpmrcGlobal)')">$([System.IO.File]::ReadAllText('$(_CopilotNpmrcGlobal)'))</_CopilotNpmrcGlobalText>
+
+    <_CopilotNpmrcText>$(_CopilotNpmrcRepoText)%0A$(_CopilotNpmrcUserText)%0A$(_CopilotNpmrcGlobalText)</_CopilotNpmrcText>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(CopilotNpmRegistryUrl)' == ''">
+    <_CopilotScopedRegistryLine>$([System.Text.RegularExpressions.Regex]::Match($(_CopilotNpmrcText), '(?m)^[ \t]*@github:registry[ \t]*=.*$'))</_CopilotScopedRegistryLine>
+
+    <_CopilotRegistryLine Condition="'$(_CopilotScopedRegistryLine)' != ''">$(_CopilotScopedRegistryLine)</_CopilotRegistryLine>
+    <_CopilotRegistryLine Condition="'$(_CopilotRegistryLine)' == ''">$([System.Text.RegularExpressions.Regex]::Match($(_CopilotNpmrcText), '(?m)^[ \t]*registry[ \t]*=.*$'))</_CopilotRegistryLine>
+
+    <_CopilotRegistryValue Condition="'$(_CopilotRegistryLine)' != ''">$([System.Text.RegularExpressions.Regex]::Replace($(_CopilotRegistryLine), '^[ \t]*(@github:)?registry[ \t]*=[ \t]*', ''))</_CopilotRegistryValue>
+
+    <CopilotNpmRegistryUrl Condition="'$(_CopilotRegistryValue)' != ''">$(_CopilotRegistryValue.Trim().Trim('"').Trim("'").TrimEnd('/'))</CopilotNpmRegistryUrl>
+  </PropertyGroup>
+
+  <!-- Only accept an absolute http(s) URL; otherwise fall back to the SDK default. -->
+  <PropertyGroup Condition="'$(CopilotNpmRegistryUrl)' != ''">
+    <CopilotNpmRegistryUrl Condition="!$(CopilotNpmRegistryUrl.StartsWith('http://')) And !$(CopilotNpmRegistryUrl.StartsWith('https://'))"></CopilotNpmRegistryUrl>
+  </PropertyGroup>
+
+</Project>
