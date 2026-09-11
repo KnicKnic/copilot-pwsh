@@ -9,11 +9,11 @@ namespace CopilotShell;
 /// Downloads the Copilot CLI binary from the npm registry on demand.
 /// The binary version is tightly coupled to the SDK version and is embedded
 /// in the assembly at build time via AssemblyMetadata("CopilotCliVersion", ...).
+/// The registry is resolved from npm's own configuration (see <see cref="NpmConfig"/>)
+/// so corporate mirrors are honoured.
 /// </summary>
 internal static class CliDownloader
 {
-    private const string NpmRegistry = "https://registry.npmjs.org";
-
     /// <summary>
     /// Gets the required CLI version from assembly metadata (stamped at build time
     /// from the GitHub.Copilot.SDK's CopilotCliVersion MSBuild property).
@@ -106,7 +106,8 @@ internal static class CliDownloader
             return null;
         }
 
-        var url = $"{NpmRegistry}/@github/copilot-{platform}/-/copilot-{platform}-{version}.tgz";
+        var registry = NpmConfig.ResolveRegistry("@github", log);
+        var url = $"{registry}/@github/copilot-{platform}/-/copilot-{platform}-{version}.tgz";
         log?.Invoke($"Downloading Copilot CLI {version} for {platform} from npm...");
 
         Directory.CreateDirectory(cacheDir);
@@ -180,7 +181,8 @@ internal static class CliDownloader
         }
         catch (Exception ex)
         {
-            log?.Invoke($"  CLI download failed: {ex.Message}");
+            log?.Invoke($"  CLI download failed from {registry}: {ex.Message}");
+            log?.Invoke($"  Set the {NpmConfig.OverrideEnvVar} environment variable to use a different npm registry.");
             return null;
         }
     }
