@@ -67,7 +67,7 @@ param(
     [string]$DefaultAgent = "",
 
     [Parameter(Mandatory=$false)]
-    [string]$Model = "claude-opus-4.6",
+    [string]$Model = "claude-opus-5",
 
     [Parameter(Mandatory=$false)]
     [string[]]$DisplayFiles = @(),

@@ -128,7 +128,7 @@ The prompt is generic and reusable. The wrapper injects run-specific context via
 | `-Agent` | string[] | Agent names to load without selecting a default agent (`-AgentNames`/`-Agents` aliases) |
 | `-AgentFolders` | string[] | Ordered folders for resolving named agents (defaults to `.github/agents`, then `~/.copilot/agents`) |
 | `-AgentFile` | string[] | Explicit `.agent.md` files to load |
-| `-Model` | string | Model ID passed unchanged to Copilot (default: `claude-opus-4.6`); no hardcoded allowlist |
+| `-Model` | string | Model ID passed unchanged to Copilot (default: `claude-opus-5`); no hardcoded allowlist |
 | `-RunOnce` | switch | Skip if previous run succeeded with same `-Version` |
 | `-Check` | switch | Return `$true`/`$false` without running |
 | `-Version` | string | Version tag for idempotent run tracking |
