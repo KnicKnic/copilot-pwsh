@@ -14,8 +14,9 @@ A cross-platform PowerShell 7+ module that wraps the [GitHub Copilot SDK](https:
 
 > **Windows PowerShell 5.x is not supported.** Use `pwsh` (PowerShell 7.4+).
 
-## Known limitations
-1. ~~mcp env args dont work~~ — **Workaround implemented:** all local MCP servers are automatically launched through `mcp-wrapper`, which handles env var propagation and persistent "zombie" daemon connections for eligible servers. Use `-NoMcpWrapper` to disable. See [github/copilot-sdk#163](https://github.com/github/copilot-sdk/issues/163) and [MCP-WRAPPER.md](MCP-WRAPPER.md).
+## MCP compatibility
+
+The historical MCP environment-variable issue [github/copilot-sdk#163](https://github.com/github/copilot-sdk/issues/163) is **closed as completed upstream**. CopilotShell retains `mcp-wrapper` for explicit env/cwd forwarding and persistent "zombie" daemon connections for eligible servers; use `-NoMcpWrapper` to disable it. See [MCP-WRAPPER.md](MCP-WRAPPER.md) and the [tracked issue status](#tracked-upstream-sdk-issues).
 
 ## Quick Install
 
@@ -356,8 +357,18 @@ This module runs on Windows, macOS, and Linux wherever .NET 8+ and PowerShell 7.
 - [copilot-cleaner](https://github.com/KnicKnic/copilot-cleaner) — local cross-platform C# Avalonia app for inspecting and cleaning GitHub Copilot session-state folders
 
 ### Tracked upstream SDK issues
-- [copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) — bare MCP server name in agent `Tools` not expanded — agent sees zero MCP tools
-- [copilot-sdk#1019](https://github.com/github/copilot-sdk/issues/1019) — per-agent tool visibility for custom sub-agents (hide tools from main agent to force delegation)
+
+All five tracked issues are **closed as completed upstream**, checked on **2026-09-14**. This records the original reports' resolution, not a guarantee for every SDK integration or transport.
+
+| Issue | Resolution | Closed (UTC) |
+|---|---|---|
+| [github/copilot-sdk#163](https://github.com/github/copilot-sdk/issues/163) | MCP environment-variable propagation fixed upstream; the wrapper remains useful for env/cwd forwarding and persistent servers. | 2026-02-17 |
+| [github/copilot-sdk#859](https://github.com/github/copilot-sdk/issues/859) | Agent preselection through `SessionConfig.Agent` enforces `CustomAgentConfig.Tools`. | 2026-05-16 |
+| [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) | Agent MCP selectors resolve bare server names, slash wildcards, namespaced names, and exact wire names on the pinned release. | 2026-08-29 |
+| [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861) | Session MCP selectors resolve supported forms; a dash glob such as `test-mcp-*` remains an unsupported literal. | 2026-08-29 |
+| [github/copilot-sdk#1019](https://github.com/github/copilot-sdk/issues/1019) | Upstream supports `DefaultAgentConfig.ExcludedTools` for default-agent-only exclusions. CopilotShell's existing custom coordinator pattern uses `-DefaultAgent` with agent `Tools`. | 2026-09-08 |
+
+See the [regression suite's completion record](tests/tracked-copilot-sdk-bugs/README.md#tracked-issues) for local results and coverage limits. `-IsolatedDefaultAgent` still applies a **session-wide** cap; it is not the SDK's default-agent-only exclusion feature.
 
 ## License
 

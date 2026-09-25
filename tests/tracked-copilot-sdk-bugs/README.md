@@ -52,11 +52,51 @@ dotnet run -- --list
 
 ## Tracked Issues
 
-| Issue | Description | Tests |
-|-------|-------------|-------|
-| [github/copilot-sdk#859](https://github.com/github/copilot-sdk/issues/859) | Agent pre-selected via `SessionConfig.Agent` did not enforce `CustomAgentConfig.Tools` | AgentToolScopingSessionAgent |
-| [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) | Agent MCP selectors did not consistently resolve server/namespaced/exact forms. Fixed by CLI/runtime 1.0.79. | McpToolAgentScoped, McpToolAgentScopedExplicit, McpToolAgentScopedSlashVsDash |
-| [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861) | Session MCP selectors did not expose tools for bare server, namespaced, or server-wildcard forms. Fixed by CLI/runtime 1.0.79; dash globs remain unsupported by design. | McpToolServerName, McpToolExplicitNamespaced, McpToolWildcard, McpToolSpecified |
+All five issues referenced by the repository are **closed as completed upstream**, checked on **2026-09-14**. There are also no open issues in `KnicKnic/copilot-pwsh` as of that date.
+
+| Issue | Closed (UTC) | Resolution and local coverage |
+|-------|--------------|-------------------------------|
+| [github/copilot-sdk#163](https://github.com/github/copilot-sdk/issues/163) | 2026-02-17 | MCP environment-variable propagation fixed upstream. No dedicated env/cwd or wrapper-persistence test in this suite; closure is upstream evidence, not a local retest. |
+| [github/copilot-sdk#859](https://github.com/github/copilot-sdk/issues/859) | 2026-05-16 | `SessionConfig.Agent` enforces agent `Tools`. `AgentToolScopingSessionAgent` and the post-select control both pass. |
+| [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) | 2026-08-29 | Agent MCP selectors fixed on SDK `1.0.11` / required CLI artifact `1.0.79`. `McpToolAgentScoped`, `McpToolAgentScopedExplicit`, and `McpToolAgentScopedSlashVsDash` pass. The original bare-server-name case is confirmed by the upstream closure report; `McpToolAgentScoped` now tests the slash wildcard, not a bare server name. |
+| [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861) | 2026-08-29 | Session MCP selectors fixed. `McpToolServerName`, `McpToolExplicitNamespaced`, `McpToolWildcard`, `McpToolSourceWildcard`, and the standalone selector matrix pass. `McpToolSpecified` confirms that a dash glob is intentionally a literal. |
+| [github/copilot-sdk#1019](https://github.com/github/copilot-sdk/issues/1019) | 2026-09-08 | Upstream added default-agent-only exclusions via `DefaultAgentConfig.ExcludedTools`. `AgentToolScopingSubagent` and `AgentToolScopingDefaultSubagent` pass for the existing custom coordinator pattern; they do not exercise that SDK exclusion property. |
+
+### Latest completion check: 2026-09-14
+
+Latest `origin/main` was fetched and merged; the branch was already up to date at `1e35750`.
+
+| Run | Result |
+|-----|--------|
+| Full tracked suite: `dotnet run -c Release --no-build -- --all` | **17/17 passed**, exit code 0; no expected failures remain. |
+| Standalone `self_contained/McpSessionAvailableTools` matrix | **6/6 selector forms matched expectations**, exit code 0. |
+
+The run used .NET SDK `8.0.425` on Windows and `GitHub.Copilot.SDK`
+`1.0.11+a550258d5c37bd662197536992a23d633bfe5804`. The SDK-bundled CLI
+artifact had file version **1.0.79**, matching the package requirement; its
+`--version` banner reported **1.0.83**. Both values are recorded rather than
+treating the banner as the artifact version. Model-backed scenarios used
+`claude-haiku-4.5`.
+
+The runner's direct npm download failed with a TLS handshake error in this
+environment. The runs instead used the matching CLI already supplied by the SDK
+build; no SDK/CLI version pins or test expectations were changed.
+
+**Coverage limits:** The MCP scenarios use a local stdio server, not the HTTP
+servers or Desktop integration mentioned in some upstream reports. Several
+model-reported tool lists included additional names; the MCP presence assertions
+only require the expected MCP tools. The standalone matrix reads runtime metadata
+and returned exactly the three expected MCP tools for supported selectors and no
+tools for the legacy dash glob. These results should not be read as a general
+proof of strict tool isolation. The env/cwd and SDK default-agent-exclusion gaps
+are called out separately in the table above.
+
+CopilotShell's `-IsolatedDefaultAgent` remains a session-wide cap and is **not**
+`DefaultAgentConfig.ExcludedTools`. To delegate to a broader custom subagent,
+leave the session unrestricted and scope the selected coordinator through its
+own `CustomAgentConfig.Tools`.
+
+### Historical results
 
 > **2026-08-28:** Retested on SDK `1.0.11` / required CLI `1.0.79`:
 > - Bare server names, namespaced exact names, and slash server wildcards now work at the session level.

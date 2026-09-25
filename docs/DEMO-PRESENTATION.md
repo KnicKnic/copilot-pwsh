@@ -193,8 +193,8 @@ The config format:
 }
 ```
 
-**Bonus:** CopilotShell actually makes MCP work *better* than VS Code in two ways:
-1. **Env var fix** — the SDK has a bug where env vars don't propagate; CopilotShell transparently fixes this
+**Bonus:** CopilotShell's MCP wrapper provides two benefits:
+1. **Explicit env/cwd forwarding** — retained after the original SDK environment-variable bug was closed upstream
 2. **Zombie daemon** — MCP servers stay alive across sessions (instant reconnect, auth tokens persist)
 
 ---
@@ -638,13 +638,13 @@ Every cmdlet inherits `AsyncPSCmdlet` and overrides `ProcessRecordAsync()`. The 
 
 ### The Problem
 
-The GitHub Copilot SDK **doesn't propagate environment variables** or working directories to MCP server processes it spawns. [copilot-sdk#163](https://github.com/github/copilot-sdk/issues/163)
+Older SDK/runtime releases failed to propagate environment variables to MCP server processes. [github/copilot-sdk#163](https://github.com/github/copilot-sdk/issues/163) was closed as completed upstream on **2026-02-17**.
 
-Your `mcp-config.json` says `"env": { "ADO_PAT": "..." }` — but the MCP server never sees it.
+The historical symptom was an `env` entry in `mcp-config.json` that the MCP server never received. The wrapper remains enabled for explicit env/cwd forwarding and server persistence, not because this issue is still open.
 
 ### The Workaround: `mcp-wrapper`
 
-CopilotShell **transparently rewrites every MCP config** to route through `mcp-wrapper`:
+CopilotShell **transparently rewrites every local MCP config** to route through `mcp-wrapper` by default; remote configs pass through unchanged:
 
 **Before (what you write):**
 ```json
@@ -655,11 +655,11 @@ CopilotShell **transparently rewrites every MCP config** to route through `mcp-w
 **After (what the SDK actually sees):**
 ```json
 { "command": "mcp-wrapper.exe", 
-  "args": ["--", "npx", "-y", "@azure-devops/mcp-server"],
+  "args": ["--env", "ADO_ORG=myorg", "--", "npx", "-y", "@azure-devops/mcp-server"],
   "env": { "ADO_ORG": "myorg" } }
 ```
 
-The wrapper proxies stdin/stdout/stderr transparently. The SDK sets env vars on the wrapper process, and the child MCP server inherits them. You never know it's there.
+The wrapper proxies stdin/stdout/stderr transparently and sets env vars on the child from explicit `--env` arguments. Working directories are similarly passed through `--cwd`, including when a persistent daemon launches the child.
 
 ---
 
@@ -715,38 +715,26 @@ Reset-CopilotMcpDaemon -Force   # Force-kill if needed
 
 ---
 
-## Technical Challenge #5: Dynamic MCP Tool Discovery
+## Technical Challenge #5: MCP Tool Selectors
 
 ### The Problem
 
-The Copilot CLI requires **exact tool names** in `-AvailableTools` — no wildcards. MCP tools are named like `grafana-mcp-search_dashboards`. A server like ADO has **82 tools**. Nobody wants to type all 82.
+Older runtimes did not consistently resolve MCP server names and wildcard selectors at the session and agent levels. The original reports, [github/copilot-sdk#860](https://github.com/github/copilot-sdk/issues/860) and [github/copilot-sdk#861](https://github.com/github/copilot-sdk/issues/861), were closed as completed on **2026-08-29**.
 
-### The Workaround: Runtime `tools/list` Protocol
+### The Resolution: Runtime Selector Matching
 
-When you pass a wildcard or bare server name, CopilotShell **temporarily starts each MCP server** and queries it:
+With SDK `1.0.11` / required CLI artifact `1.0.79`, CopilotShell passes tool selectors through unchanged. The runtime resolves them; CopilotShell does **not** launch servers for `tools/list` discovery or rewrite slashes into dashes.
 
-```
-1. Start process:  npx -y @azure-devops/mcp-server
-2. Send:           {"method":"initialize", "params":{...}}
-3. Receive:        {"result":{"capabilities":{...}}}
-4. Send:           {"method":"notifications/initialized"}
-5. Send:           {"method":"tools/list"}
-6. Receive:        {"result":{"tools":[{"name":"wiki_get_page"}, ...]}}
-7. Kill process
-```
-
-Then patterns are expanded:
-
-| You write | Expands to |
+| Selector | Meaning |
 |---|---|
-| `'ado'` | All 82 ADO tools |
-| `'ado-wiki_*'` | `ado-wiki_get_page`, `ado-wiki_search`, ... |
-| `'grafana-mcp'` | All 24 Grafana tools |
-| `'powershell'` | `write_powershell`, `read_powershell`, `stop_powershell`, `list_powershell` |
+| `'ado'` or `'ado/*'` | All tools from the ADO MCP server |
+| `'ado/wiki_get_page'` | One namespaced MCP tool |
+| `'ado-wiki_get_page'` | One exact wire name |
+| `'mcp:*'` | All MCP tools at the session level |
+| `'builtin:*'` | All built-in tools at the session level |
+| `'ado-*'` | Unsupported dash glob; treated as a literal |
 
-Forward slashes are normalized to dashes (`ado/wiki_get_page` → `ado-wiki_get_page`).
-
-16 core CLI tools (`view`, `edit`, `grep`, `create`, etc.) are **always** included automatically.
+Source selectors such as `mcp:*` belong to session `AvailableTools`, not agent `Tools`. Session restrictions apply only when explicitly requested and cap every subagent; CopilotShell does not automatically add built-in tools to a supplied filter.
 
 ---
 
@@ -1057,7 +1045,7 @@ Invoke-Copilot "Check the deployment status" `
 
 - **GitHub:** [github.com/KnicKnic/copilot-pwsh](https://github.com/KnicKnic/copilot-pwsh)
 - **Copilot SDK:** [github.com/github/copilot-sdk](https://github.com/github/copilot-sdk)
-- **SDK env bug:** [copilot-sdk#163](https://github.com/github/copilot-sdk/issues/163)
+- **Resolved SDK env bug:** [github/copilot-sdk#163](https://github.com/github/copilot-sdk/issues/163)
 - **License:** MIT
 
 ---

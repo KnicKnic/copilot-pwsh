@@ -4,7 +4,9 @@ A transparent MCP server proxy with an integrated zombie daemon for persistent s
 
 ## Problem
 
-The GitHub Copilot SDK doesn't propagate environment variables or working directories to MCP server processes ([copilot-sdk#163](https://github.com/github/copilot-sdk/issues/163)). Additionally, MCP servers are started fresh for every Copilot session — losing authentication tokens and incurring startup latency each time.
+The wrapper originally addressed MCP environment-variable propagation failures tracked in [github/copilot-sdk#163](https://github.com/github/copilot-sdk/issues/163). That issue was closed as completed upstream on **2026-02-17**; it is no longer an open SDK blocker.
+
+The wrapper remains enabled by default for explicit env/cwd forwarding and persistent server connections. Without persistence, MCP servers are started fresh for every Copilot session, losing authentication tokens and incurring startup latency each time. Use `-NoMcpWrapper` to opt out; the tracked SDK regression suite does not separately retest env/cwd forwarding or wrapper persistence.
 
 ## Solution
 
